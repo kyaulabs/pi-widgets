@@ -1,2 +1,13 @@
 #!/bin/sh
-gitleaks detect --source . -v --no-color --max-target-megabytes 5
+set -eu
+
+repository_root=$(git rev-parse --show-toplevel)
+cd "$repository_root"
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  printf '%s\n' 'pre-commit: gitleaks is required but was not found' >&2
+  exit 1
+fi
+
+gitleaks detect --source . --verbose --no-color --max-target-megabytes 5
+npm run check

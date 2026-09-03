@@ -1,2 +1,12 @@
 #!/bin/sh
-commitlint --edit ${1}
+set -eu
+
+repository_root=$(git rev-parse --show-toplevel)
+commitlint="$repository_root/node_modules/.bin/commitlint"
+
+if [ ! -x "$commitlint" ]; then
+  printf '%s\n' 'commit-msg: run npm install before committing' >&2
+  exit 1
+fi
+
+exec "$commitlint" --edit "$1"
