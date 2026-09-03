@@ -176,7 +176,15 @@ Invalid values use their defaults. Missing or malformed settings files do not st
 
 ### Colors and Zentui
 
-The footer color moves from red at 15 tok/s or less through yellow to green at 40 tok/s or more. Standard Pi output uses 24-bit ANSI color.
+The footer color moves through these throughput ranges:
+
+- 15 tok/s or less: red
+- 15–40 tok/s: red through yellow to green (`#1aaa13`)
+- 40–75 tok/s: green to cyan (`#4dc5dc`)
+- 75–100 tok/s: cyan to purple (`#73488b`)
+- 100 tok/s or more: purple
+
+Standard Pi output uses 24-bit ANSI color.
 
 When [pi-zentui](https://github.com/lmilojevicc/pi-zentui) advertises working-line segment support, the widget sends TPS and TTFT as a named `tps` segment instead of replacing Pi's working message. It also emits the matching status color before each footer update. Without Zentui, it uses Pi's standard status and working-message APIs.
 

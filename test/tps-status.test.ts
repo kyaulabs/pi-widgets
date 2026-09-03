@@ -231,6 +231,30 @@ describe("TPS status", () => {
     await harness.fire("agent_settled");
   });
 
+  it("moves from green through cyan to purple at high throughput", async () => {
+    const cases = [
+      { durationMs: 200, output: 15, color: "#4dc5dc" },
+      { durationMs: 400, output: 35, color: "#6087b4" },
+      { durationMs: 200, output: 20, color: "#73488b" },
+      { durationMs: 200, output: 30, color: "#73488b" },
+    ];
+
+    for (const { durationMs, output, color } of cases) {
+      vi.setSystemTime(0);
+      const harness = createHarness();
+      tpsStatus(harness.pi);
+      await harness.fire("before_agent_start");
+      await harness.fire("turn_start");
+      vi.advanceTimersByTime(durationMs);
+      await stream(harness, "x", "text_delta", output);
+      expect(harness.eventEmit).toHaveBeenCalledWith("zentui:extension-status-color", {
+        key: "tps",
+        color,
+      });
+      await harness.fire("session_shutdown");
+    }
+  });
+
   it("waits for a measurable interval and output before showing TPS", async () => {
     const harness = createHarness();
     tpsStatus(harness.pi);

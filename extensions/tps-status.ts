@@ -18,6 +18,11 @@ const DEFAULT_REFRESH_MS = 250;
 const CODE_POINTS_PER_ESTIMATED_TOKEN = 4;
 const TPS_RED_MAX = 15;
 const TPS_GREEN_MIN = 40;
+const TPS_CYAN_MIN = 75;
+const TPS_PURPLE_MIN = 100;
+const TPS_GREEN = [0x1a, 0xaa, 0x13] as const;
+const TPS_CYAN = [0x4d, 0xc5, 0xdc] as const;
+const TPS_PURPLE = [0x73, 0x48, 0x8b] as const;
 const HELP_TEXT = [
   "TPS/TTFT commands:",
   "  /tps                         Show current metrics and display settings",
@@ -198,26 +203,48 @@ type TpsColor = {
   ansi: string;
 };
 
+function interpolateColor(
+  start: readonly [number, number, number],
+  end: readonly [number, number, number],
+  progress: number,
+): [number, number, number] {
+  return [
+    Math.round(start[0] + (end[0] - start[0]) * progress),
+    Math.round(start[1] + (end[1] - start[1]) * progress),
+    Math.round(start[2] + (end[2] - start[2]) * progress),
+  ];
+}
+
 function tpsColor(value: number): TpsColor {
-  // Sweep through red, orange, amber, yellow, lime, and chartreuse before
-  // reaching the same #1aaa13 green used for session cost at 40 tok/s.
-  const progress = Math.min(
-    1,
-    Math.max(0, (value - TPS_RED_MAX) / (TPS_GREEN_MIN - TPS_RED_MAX)),
-  );
   let red: number;
   let green: number;
   let blue: number;
-  if (progress <= 0.5) {
-    red = 255;
-    green = Math.round(progress * 2 * 255);
-    blue = 0;
+
+  if (value <= TPS_GREEN_MIN) {
+    // Sweep through warm colors before reaching session-cost green at 40 tok/s.
+    const progress = Math.min(
+      1,
+      Math.max(0, (value - TPS_RED_MAX) / (TPS_GREEN_MIN - TPS_RED_MAX)),
+    );
+    if (progress <= 0.5) {
+      red = 255;
+      green = Math.round(progress * 2 * 255);
+      blue = 0;
+    } else {
+      const greenProgress = (progress - 0.5) * 2;
+      [red, green, blue] = interpolateColor([255, 255, 0], TPS_GREEN, greenProgress);
+    }
+  } else if (value <= TPS_CYAN_MIN) {
+    const progress = (value - TPS_GREEN_MIN) / (TPS_CYAN_MIN - TPS_GREEN_MIN);
+    [red, green, blue] = interpolateColor(TPS_GREEN, TPS_CYAN, progress);
   } else {
-    const greenProgress = (progress - 0.5) * 2;
-    red = Math.round(255 + (0x1a - 255) * greenProgress);
-    green = Math.round(255 + (0xaa - 255) * greenProgress);
-    blue = Math.round(0x13 * greenProgress);
+    const progress = Math.min(
+      1,
+      (value - TPS_CYAN_MIN) / (TPS_PURPLE_MIN - TPS_CYAN_MIN),
+    );
+    [red, green, blue] = interpolateColor(TPS_CYAN, TPS_PURPLE, progress);
   }
+
   const hex = `#${red.toString(16).padStart(2, "0")}${green.toString(16).padStart(2, "0")}${blue.toString(16).padStart(2, "0")}`;
   return {
     style: hex,
