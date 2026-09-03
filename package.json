@@ -1,0 +1,62 @@
+{
+  "name": "@kyaulabs/pi-widgets",
+  "version": "0.1.0",
+  "description": "Fast mode, token throughput, and time-to-first-token status widgets for Pi",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "author": "KYAU Labs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kyaulabs/pi-widgets.git"
+  },
+  "homepage": "https://github.com/kyaulabs/pi-widgets#readme",
+  "bugs": {
+    "url": "https://github.com/kyaulabs/pi-widgets/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "openai",
+    "fast-mode",
+    "tps",
+    "ttft",
+    "statusline"
+  ],
+  "files": [
+    "extensions",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/gpt-fast-mode-status.ts",
+      "./extensions/tps-status.ts"
+    ]
+  },
+  "scripts": {
+    "check": "npm run typecheck && npm run test:coverage",
+    "hooks:install": "git config core.hooksPath .github/hooks && chmod +x .github/hooks/commit-msg .github/hooks/pre-commit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run check"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@earendil-works/pi-coding-agent": "0.84.4",
+    "@types/node": "^24.10.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

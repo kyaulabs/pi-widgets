@@ -1,3 +1,22 @@
-# Visual Studio cache directory
-*/.vs/
+# Dependencies
+node_modules/
+
+# Test output
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editors and operating systems
+.vscode/
+.idea/
 .vs/
+.DS_Store
+Thumbs.db
+
+# Local environment
+.env
+.env.*
+!.env.example

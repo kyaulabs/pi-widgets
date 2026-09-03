@@ -1,37 +1,28 @@
-# Security Policy
+# Security policy
 
-This document outlines security procedures and general policies.
+## Supported versions
 
-* [Supported Version](#supported-versions)
-* [Reporting a Bug](#reporting-a-bug)
-* [Disclosure Policy](#disclosure-policy)
-* [Comments](#comments)
+Security fixes are released for the latest published minor version.
 
-## Supported Versions
+| Version | Supported |
+| --- | --- |
+| Latest `0.1.x` | Yes |
+| Older versions | No |
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.0.0   | :white_check_mark: |
-| < 1.0.0 | :x:                |
+This table will change when the project publishes a new minor or major release.
 
-## Reporting a Bug
+## Report a vulnerability
 
-The team and community take all security bugs seriously. Thank you for improving the security. We appreciate your efforts and responsible disclosure and will make every effort to acknowledge your contributions.
+Email [git@kyaulabs.com](mailto:git@kyaulabs.com). Do not open a public issue for an undisclosed vulnerability.
 
-Report security bugs by emailing the lead maintainer at [mailto:git@kyaulabs.com](git@kyaulabs.com).
+Include the affected version, installation source, impact, reproduction steps, and any known workaround. Remove API keys, credentials, prompts, and private settings from logs or examples. If encrypted communication is required, request a suitable channel in the first message.
 
-The lead maintainer will acknowledge your email within 48 hours, and will send a more detailed response within 48 hours indicating the next steps in handling your report. After the initial reply to your report, the security team will endeavor to keep you informed of the progress towards a fix and full announcement, and may ask for additional information or guidance.
+The maintainer will confirm receipt, investigate the report, and coordinate disclosure with the reporter. Fix timing depends on severity, reproducibility, and upstream Pi behavior.
 
-Report security bugs in third-party modules/packages to the person or team maintaining the module and/or package.
+Report vulnerabilities in Pi or another dependency to that dependency's maintainers unless this package creates or exposes the problem.
 
-## Disclosure Policy
+## Security boundary
 
-When the security team receives a security bug report, they will assign it to a primary handler. This person will coordinate the fix and release process, involving the following steps:
+Pi extensions execute with the same operating-system permissions as Pi. Review package source before installation.
 
-* Confirm the problem and determine the affected versions.
-* Audit code to find any potential similar problems.
-* Prepare fixes for all releases still under maintenance. These fixes will be released as fast as possible.
-
-## Commments
-
-If you have suggestions on how this process could be improved please submit a pull request.
+`gpt-fast-mode-status.ts` reads Pi's settings and keybindings files. When enabled for a supported model, it adds `service_tier: "priority"` to the outgoing provider payload. `tps-status.ts` observes Pi lifecycle, usage, and tool events and writes terminal status text. Neither extension stores credentials or sends telemetry.
