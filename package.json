@@ -34,8 +34,10 @@
     ]
   },
   "scripts": {
-    "check": "npm run typecheck",
+    "check": "npm run typecheck && npm run test:coverage",
     "hooks:install": "git config core.hooksPath .github/hooks && chmod +x .github/hooks/commit-msg .github/hooks/pre-commit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run check"
   },
@@ -47,7 +49,9 @@
     "@commitlint/config-conventional": "^21.2.2",
     "@earendil-works/pi-coding-agent": "0.84.4",
     "@types/node": "^24.10.0",
-    "typescript": "^5.9.3"
+    "@vitest/coverage-v8": "^4.1.11",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=22.19.0"
