@@ -52,7 +52,7 @@ npm pack --dry-run
 gitleaks detect --source . --verbose --no-color --max-target-megabytes 5
 ```
 
-`npm run check` runs TypeScript and coverage tests. Coverage must remain at or above 95 percent for statements, branches, functions, and lines. Inspect the tarball listing from `npm pack --dry-run`; test files, coverage output, and local configuration must not be published.
+`npm run check` runs ESLint, TypeScript, and coverage tests. Coverage must remain at or above 98 percent for statements, branches, functions, and lines. Inspect the tarball listing from `npm pack --dry-run`; test files, coverage output, and local configuration must not be published.
 
 A TPS rendering change also needs a manual Pi check. Exercise the standard interface and Zentui when the change affects their shared event contract.
 

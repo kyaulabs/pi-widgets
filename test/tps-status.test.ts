@@ -61,6 +61,7 @@ describe("TPS status", () => {
     tpsStatus(harness.pi);
     await harness.fire("session_start");
     await harness.fire("before_agent_start");
+    await harness.fire("before_agent_start");
     await harness.fire("agent_start");
     await harness.fire("turn_start");
 
@@ -138,6 +139,7 @@ describe("TPS status", () => {
       "info",
     );
     await runCommand(harness, "status");
+    await runCommand(harness, "on");
 
     await harness.fire("before_agent_start");
     for (const value of ["off", "on", "toggle", "on"] as const) {

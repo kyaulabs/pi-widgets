@@ -34,7 +34,7 @@ const HELP_TEXT = [
   "  /tps help                    Show this help",
   "",
   "Command changes last for the current session. Persistent defaults are under",
-  `\"${CONFIG_FIELD}\" in ~/.pi/agent/settings.json.`,
+  `"${CONFIG_FIELD}" in ~/.pi/agent/settings.json.`,
 ].join("\n");
 
 type JsonObject = Record<string, unknown>;

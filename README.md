@@ -210,7 +210,7 @@ npm run check
 npm pack --dry-run
 ```
 
-`npm run check` type-checks the extensions and runs coverage with 95 percent minimums for statements, branches, functions, and lines. The pre-commit hook also requires [Gitleaks](https://github.com/gitleaks/gitleaks).
+`npm run check` lints and type-checks the extensions, then runs coverage with 98 percent minimums for statements, branches, functions, and lines. The pre-commit hook also requires [Gitleaks](https://github.com/gitleaks/gitleaks).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for test and pull-request requirements.
 
