@@ -79,4 +79,9 @@ Open pull requests against `develop`. Include:
 
 A maintainer may ask for a smaller change or an additional test when the current scope makes behavior difficult to review.
 
+## Releases
+
+Maintainers should follow [RELEASING.md](RELEASING.md) for the protected release-branch flow,
+GitHub publication, and the final manual npm publication.
+
 By submitting a contribution, you agree that it is licensed under the repository's [GNU Affero General Public License v3.0](LICENSE).
