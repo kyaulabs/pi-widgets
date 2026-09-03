@@ -34,8 +34,9 @@
     ]
   },
   "scripts": {
-    "check": "npm run typecheck && npm run test:coverage",
+    "check": "npm run lint && npm run typecheck && npm run test:coverage",
     "hooks:install": "git config core.hooksPath .github/hooks && chmod +x .github/hooks/commit-msg .github/hooks/pre-commit",
+    "lint": "eslint extensions test *.ts *.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
@@ -48,9 +49,12 @@
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
     "@earendil-works/pi-coding-agent": "0.84.4",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.10.0",
     "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^10.9.1",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.69.0",
     "vitest": "^4.1.11"
   },
   "engines": {
