@@ -5,7 +5,7 @@ Status widgets for [Pi](https://github.com/earendil-works/pi-mono). The package 
 - `gpt-fast-mode-status.ts` toggles OpenAI's `priority` service tier and shows when Fast mode is active.
 - `tps-status.ts` reports token throughput and time to first token (TTFT) in Pi's footer and working line.
 
-[![CI](https://github.com/kyaulabs/pi-widgets/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/kyaulabs/pi-widgets/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/kyaulabs/pi-widgets/ci.yml?branch=develop)](https://github.com/kyaulabs/pi-widgets/actions)
 [![npm](https://img.shields.io/npm/v/@kyaulabs/pi-widgets)](https://www.npmjs.com/package/@kyaulabs/pi-widgets)
 [![license](https://img.shields.io/github/license/kyaulabs/pi-widgets)](LICENSE)
 
