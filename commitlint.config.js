@@ -6,6 +6,7 @@ export default {
       "always",
       [
         "feat",
+        "build",
         "patch",
         "fix",
         "docs",
