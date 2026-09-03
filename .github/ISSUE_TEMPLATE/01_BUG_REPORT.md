@@ -1,34 +1,33 @@
 ---
-name: "\U0001F41B Bug Report"
-about: "If something isn't working as expected \U0001F914."
-title: ''
-labels: 'i: bug, i: needs triage'
-assignees: ''
-
+name: Bug report
+about: Report reproducible incorrect behavior
+title: ""
+labels: ""
+assignees: ""
 ---
 
-## Bug Report
+## What happened?
 
-### Environment
-| Hardware        | Model                      |
-| ----------------| -------------------------- |
-| Platform        | *Desktop, Laptop, or Tablet* |
-| CPU             |                            |
-| GPU             |                            |
-| HDD             | *Disk, SSD, or NVME*       |
-| Windows Version | *Pro N*                    |
-| Windows Build   | *22621.169*                |
+Describe the observed behavior and its effect.
 
-### What is the expected behavior?
+## What did you expect?
 
-### What is the actual behavior?
+Describe the expected behavior.
 
-### Additional information to reproduce the issue?
+## Reproduction
 
-Add any other content about the problem here. If applicable, add screenshots to help explain.
+List the smallest sequence that reproduces the problem. Include relevant commands and sanitized `pi-gpt-fast-mode` or `pi-tps-status` settings.
 
-### Possible Solution?
+## Environment
 
-### If the bug is confirmed, would you be willing to submit a PR?
+- pi-widgets version or commit:
+- Pi version:
+- Node.js version:
+- Operating system:
+- Terminal:
+- Interface: standard Pi / Zentui
+- Provider and model, if relevant:
 
-Yes / No *(Help can be provided if you need assistance submitting a PR)*
+## Verification details
+
+Include sanitized output, screenshots, or a minimal repository when they help reproduce the problem. Do not include API keys, credentials, private prompts, or complete settings files.

@@ -1,21 +1,29 @@
-# Summary of the Pull Request
+## Summary
 
-# References
+Describe the problem and the chosen solution.
 
-# PR Checklist
+## User-visible effects
 
-## All Submissions:
+List changes to commands, settings, supported models, timing, terminal output, or compatibility. Write `None` when the change has no user-visible effect.
 
-* [ ] Have you followed the guidelines in our Contributing document?
-* [ ] Have you checked to ensure there aren't other open [Pull Requests](../../../pulls) for the same update/change?
-* [ ] Does your submission ensure overall functionality?
-* [ ] Have you lint your code locally prior to submission?
-* [ ] Have you run your code through `zricethezav/gitleaks` prior to submission?
+## Verification
 
-## Changes to Core Features:
+- [ ] `npm run check`
+- [ ] `npm pack --dry-run`
+- [ ] Gitleaks scan
+- [ ] Manual Pi check, when runtime behavior changed
+- [ ] Standard Pi and Zentui checks, when their shared status events changed
 
-* [ ] Have you added an explanation of what your changes do and why you would like us to include them?
-* [ ] Have you properly tested your changes?
-* [ ] Have you successfully ran through a local test installation with your changes?
+Add relevant test output or manual steps below.
 
-# Additional Comments
+## Checklist
+
+- [ ] The change has one reviewable purpose.
+- [ ] Tests cover new behavior and failure paths.
+- [ ] Documentation matches commands, settings, and visible output.
+- [ ] No credentials, private prompts, generated coverage, or local settings are included.
+- [ ] Commits follow Conventional Commits.
+
+## Related issues
+
+Use `Fixes #123` for an issue this pull request closes, or `Refs #123` for related work.

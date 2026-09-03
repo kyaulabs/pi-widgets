@@ -1,30 +1,27 @@
 ---
-name: "\U0001F680 Feature Request"
-about: "I have a suggestion (and may want to implement it \U0001F642)!"
-title: ''
-labels: 'i: enhancement, i: needs triage'
-assignees: ''
-
+name: Feature request
+about: Propose a focused change to pi-widgets
+title: ""
+labels: ""
+assignees: ""
 ---
 
-## Feature Request
+## Problem
 
-### What exactly are you trying to accomplish?
+Describe the task that is difficult or impossible today. Include the affected widget and current behavior.
 
-*Context matters. What are you trying to do? Is this something you currently cannot do?*
+## Proposed behavior
 
-### Is your feature request related to an issue, problem or flaw?
+Describe the command, setting, event handling, or visible output you want. Include a concrete example when possible.
 
-*Clear and concise description of what the problem is.*
+## Alternatives
 
-### Proposed Solution
+List other approaches you considered and why they do not solve the problem.
 
-*Clear and concise description of what you want to happen. Add any considered drawbacks.*
+## Compatibility
 
-### Alternative Solutions
+Note any effect on Pi versions, providers, models, terminals, or Zentui.
 
-*Clear and concise description of alternative solutions or methods you have considered. Is the alternative considerable?*
+## Contribution
 
-### If the feature request is approved, would you be willing to submit a PR?
-
-Yes / No *(Help can be provided if you need assistance submitting a PR)*
+Would you be willing to implement and test this change?
