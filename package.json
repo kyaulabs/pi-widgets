@@ -29,8 +29,8 @@
   ],
   "pi": {
     "extensions": [
-      "./extensions/gpt-fast-mode-status.ts",
-      "./extensions/tps-status.ts"
+      "./extensions/fast-mode.ts",
+      "./extensions/tps.ts"
     ]
   },
   "scripts": {
