@@ -25,4 +25,4 @@ Report vulnerabilities in Pi or another dependency to that dependency's maintain
 
 Pi extensions execute with the same operating-system permissions as Pi. Review package source before installation.
 
-`gpt-fast-mode-status.ts` reads Pi's settings and keybindings files. When enabled for a supported model, it adds `service_tier: "priority"` to the outgoing provider payload. `tps-status.ts` observes Pi lifecycle, usage, and tool events and writes terminal status text. Neither extension stores credentials or sends telemetry.
+`fast-mode.ts` reads Pi's settings and keybindings files. When enabled for a supported model, it adds `service_tier: "priority"` to the outgoing provider payload. `tps.ts` observes Pi lifecycle, usage, and tool events and writes terminal status text. Neither extension stores credentials or sends telemetry.
