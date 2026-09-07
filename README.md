@@ -6,8 +6,8 @@
 
 Status widgets for [Pi](https://github.com/earendil-works/pi-mono). The package contains two independent extensions:
 
-- `gpt-fast-mode-status.ts` toggles OpenAI's `priority` service tier and shows when Fast mode is active.
-- `tps-status.ts` reports token throughput and time to first token (TTFT) in Pi's footer and working line.
+- `fast-mode.ts` toggles OpenAI's `priority` service tier and shows when Fast mode is active.
+- `tps.ts` reports token throughput and time to first token (TTFT) in Pi's footer and working line.
 
 ## Requirements
 
@@ -47,13 +47,17 @@ Pi package filters can select a single widget. Add the package in object form to
   "packages": [
     {
       "source": "npm:@kyaulabs/pi-widgets",
-      "extensions": ["extensions/gpt-fast-mode-status.ts"]
+      "extensions": ["extensions/fast-mode.ts"]
     }
   ]
 }
 ```
 
-Replace the extension path with `extensions/tps-status.ts` to load only the TPS widget.
+Replace the extension path with `extensions/tps.ts` to load only the TPS widget.
+
+If upgrading from the old filenames, update explicit extension paths and package filters to
+`extensions/fast-mode.ts` and `extensions/tps.ts`. Remove any manually copied old files to avoid
+loading duplicate widgets. Commands, settings keys, and shortcuts are unchanged.
 
 ## GPT Fast mode
 
