@@ -119,9 +119,17 @@ The default is `ctrl+alt+m`. The extension ignores `ctrl+m`, `enter`, and `retur
 
 ## TPS and TTFT status
 
-The TPS widget starts a measurement when Pi begins processing a prompt and finalizes it at `agent_settled`. It keeps one measurement across model turns, tool calls, retries, compaction, and queued continuations that belong to the same prompt.
+The TPS widget measures **observed generation speed**: how fast the AI produces output once
+it starts. For each response, TPS timing starts at the first nonempty text, thinking, or
+tool-call argument delta and stops at the assistant's `message_end`. The initial wait is
+shown separately as TTFT, not included in TPS.
 
-The footer shows tokens per second after output begins. The working line shows TPS and TTFT while Pi is active:
+For example, 10 seconds processing a large file followed by 100 output tokens generated in
+2 seconds produces **50.0 tok/s**, with **TTFT 10.0s**. Reading the file itself counts toward neither.
+
+The footer shows tokens per second after output begins and freezes between requests. The
+working-line suffix is removed while the meter is paused, leaving Pi's normal tool, compaction,
+and retry indicators alone. During a request it shows TPS and TTFT:
 
 ```text
 32.4 tok/s · TTFT 684ms
@@ -130,12 +138,54 @@ The footer shows tokens per second after output begins. The working line shows T
 The metric uses this calculation:
 
 ```text
-output tokens / (prompt elapsed time - Bash and PowerShell execution time)
+output tokens from measurable responses / their accumulated generation seconds
 ```
 
-Completed responses use the provider's output-token count. While a response is streaming, the widget uses an estimate of one token per four Unicode code points until exact usage is available. TTFT ends at the first streamed text, thinking, or tool-call delta, or at the first positive output-token update.
+The initial wait is excluded **on every response**, including the request after a large file
+read. The footer keeps a generation-time-weighted aggregate across the prompt's responses,
+finalized at `agent_settled`, rather than averaging individual rates.
 
-TPS therefore measures prompt-level throughput, not provider decode speed alone. Non-shell tools, retries, and model wait time remain part of elapsed time.
+Live output is estimated internally at one token per four Unicode code points.
+Partial provider usage is not trusted as a current total: it can remain stale while more text
+arrives. At completion, a positive provider-reported output count replaces that response's
+estimate. Missing, invalid, or zero-placeholder usage retains the estimate.
+The UI always uses plain `tok/s` and `TTFT`, without estimate labels or approximation symbols;
+this display choice does not make live or fallback token counts exact.
+
+Text, thinking, and tool-call argument generation count as assistant output; input/cache tokens,
+tool results, nested tool-model usage, and compaction/branch-summary usage do not. Reasoning
+usage is already included in provider output totals and is never added a second time.
+
+Responses without an observed content delta, or with less than 50 ms of observed generation,
+are excluded from both the numerator and denominator. This avoids inventing a rate from a
+final-only usage report or folding untimed tokens into later responses.
+
+Both TPS and TTFT exclude:
+
+- All tool execution, including parallel/custom tools, permission gates, and result hooks.
+- Manual, automatic, failed, and cancelled compactions, plus branch summarization.
+- Prompt/context preparation and credential resolution before the provider-request hook.
+- Blocking extension UI prompts and gaps between model requests.
+- Pi's automatic retry backoff, queued-continuation preparation, and idle time.
+
+TTFT runs from `before_provider_request` to the first content delta, excluding observable
+pauses. It resets for each response, so it reflects the current request's initial wait.
+Usage-only events never invent a first-token timestamp. An aborted response without output
+does not leave a TTFT counter running. Cancellation stops timing immediately and retains
+only a measurable estimate of output observed before cancellation.
+
+Observable non-success HTTP responses pause timing until the next request hook or successful
+response/stream start. If a provider retries without another request hook, retry pre-response
+latency cannot be separated from backoff and is excluded from TTFT too. Custom providers
+without a payload hook can still yield generation TPS, but TTFT is omitted as unavailable.
+
+**Accuracy limits:** this is a client-observed rate, not exact server-side decoding speed.
+Pi streams chunks, not individually timestamped tokens. The formula uses the whole response's
+output count, including its first chunk, over the observed first-delta-to-completion interval.
+Network buffering, hidden reasoning before the first delta, and response-finalization latency
+can skew the result, particularly for short responses. Hidden provider-internal retries or
+reconnects after output starts cannot reliably be separated from generation. Delays before
+output starts never lower TPS.
 
 ### Commands
 

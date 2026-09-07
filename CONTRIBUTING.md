@@ -35,7 +35,10 @@ Keep each change limited to one purpose. Preserve these runtime contracts:
 - Extensions must load through Pi's TypeScript package loader without generated files.
 - `@earendil-works/pi-coding-agent` must remain an unbundled peer dependency.
 - Session shutdown must clear timers and UI state.
-- TPS measurements must not count Bash or PowerShell execution time.
+- TPS must measure generation after first output, excluding every response's initial wait;
+  TTFT measures that wait separately for each response. Exclude tools, compaction, blocking UI,
+  and between-request delays. Keep the UI labels to `tok/s` and `TTFT`, document internal
+  estimation limits, and test lifecycle timing deterministically.
 - Unsupported models must not receive `service_tier: "priority"`.
 
 Tests should assert behavior at the Pi extension boundary. Use temporary files for configuration and deterministic clocks for timing. Do not expose private production functions only to increase coverage.

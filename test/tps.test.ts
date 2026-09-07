@@ -64,9 +64,12 @@ describe("TPS status", () => {
     await harness.fire("before_agent_start");
     await harness.fire("agent_start");
     await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
 
     vi.advanceTimersByTime(100);
     await stream(harness, "test");
+    vi.advanceTimersByTime(100);
+    await runCommand(harness, "bar on");
     expect(harness.setStatus).toHaveBeenLastCalledWith(
       "tps",
       "\u001b[38;2;255;0;0m10.0 tok/s\u001b[39m",
@@ -80,6 +83,9 @@ describe("TPS status", () => {
     await harness.fire("message_update", { message: { role: "user" } });
 
     vi.advanceTimersByTime(100);
+    await harness.fire("message_end", {
+      message: { role: "assistant", usage: { output: 8 } },
+    });
     await harness.fire("tool_execution_start", { toolName: "bash", toolCallId: "one" });
     await harness.fire("tool_execution_start", { toolName: "bash", toolCallId: "one" });
     await harness.fire("tool_execution_start", {
@@ -103,6 +109,7 @@ describe("TPS status", () => {
     });
 
     await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
     vi.advanceTimersByTime(100);
     await stream(harness, "😀😀😀😀", "thinking_delta");
     await stream(harness, "abcd", "toolcall_delta", 4);
@@ -114,7 +121,7 @@ describe("TPS status", () => {
     await harness.fire("agent_settled");
     await harness.fire("agent_settled");
 
-    expect(harness.setWorkingMessage).toHaveBeenCalledWith("");
+    expect(harness.setWorkingMessage).toHaveBeenCalledWith(undefined);
     await harness.fire("session_shutdown");
     expect(harness.setStatus).toHaveBeenCalledWith("tps", undefined);
   });
@@ -142,6 +149,8 @@ describe("TPS status", () => {
     await runCommand(harness, "on");
 
     await harness.fire("before_agent_start");
+    await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
     for (const value of ["off", "on", "toggle", "on"] as const) {
       await runCommand(harness, value);
     }
@@ -172,7 +181,7 @@ describe("TPS status", () => {
     await harness.fire("session_shutdown");
   });
 
-  it("uses exact usage updates and Zentui working-line segments", async () => {
+  it("uses plain tok/s in Zentui working-line segments", async () => {
     writeSettings(agentDir, {
       "pi-tps-status": {
         enabled: true,
@@ -187,11 +196,13 @@ describe("TPS status", () => {
     await harness.fire("session_start");
     await harness.fire("agent_start");
     await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
     vi.advanceTimersByTime(100);
     await harness.fire("message_update", {
       message: { role: "assistant", usage: { output: 100 } },
-      assistantMessageEvent: { type: "text_delta", delta: "x" },
+      assistantMessageEvent: { type: "text_delta", delta: "x".repeat(400) },
     });
+    vi.advanceTimersByTime(100);
 
     expect(harness.setStatus).not.toHaveBeenCalledWith("tps", expect.any(String));
     expect(harness.eventEmit).toHaveBeenCalledWith("zentui:working-line-segment", {
@@ -212,6 +223,7 @@ describe("TPS status", () => {
     const harness = createHarness();
     tpsStatus(harness.pi);
     await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
     vi.advanceTimersByTime(2_000);
     await stream(harness, "abcdefgh");
     expect(harness.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 2.00s");
@@ -225,8 +237,10 @@ describe("TPS status", () => {
     tpsStatus(harness.pi);
     await harness.fire("before_agent_start");
     await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
     vi.advanceTimersByTime(10_001);
     await stream(harness, "x".repeat(8_000));
+    vi.advanceTimersByTime(10_000);
 
     expect(harness.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 10.0s");
     expect(harness.setStatus.mock.calls.at(-1)?.[1]).toContain("200 tok/s");
@@ -247,8 +261,10 @@ describe("TPS status", () => {
       tpsStatus(harness.pi);
       await harness.fire("before_agent_start");
       await harness.fire("turn_start");
+      await harness.fire("before_provider_request");
+      await stream(harness, "x".repeat(output * 4), "text_delta", output);
       vi.advanceTimersByTime(durationMs);
-      await stream(harness, "x", "text_delta", output);
+      await runCommand(harness, "bar on");
       expect(harness.eventEmit).toHaveBeenCalledWith("zentui:extension-status-color", {
         key: "tps",
         color,
@@ -262,6 +278,7 @@ describe("TPS status", () => {
     tpsStatus(harness.pi);
     await harness.fire("before_agent_start");
     await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
     vi.advanceTimersByTime(10);
     await stream(harness, "abcd");
     expect(harness.setStatus).not.toHaveBeenCalledWith("tps", expect.any(String));
@@ -270,6 +287,7 @@ describe("TPS status", () => {
       message: { role: "assistant", usage: { output: 0 } },
     });
     await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
     await harness.fire("message_end", { message: { role: "assistant", usage: {} } });
     await harness.fire("agent_settled");
   });
@@ -289,6 +307,7 @@ describe("TPS status", () => {
     await harness.fire("session_start");
     await harness.fire("before_agent_start");
     await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
     vi.advanceTimersByTime(1_000);
     expect(harness.setWorkingMessage).not.toHaveBeenCalled();
 
@@ -309,6 +328,8 @@ describe("TPS status", () => {
     tpsStatus(harness.pi);
     await harness.fire("session_start");
     await harness.fire("before_agent_start");
+    await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
     vi.advanceTimersByTime(1_999);
     const before = harness.setWorkingMessage.mock.calls.length;
     vi.advanceTimersByTime(1);
@@ -319,12 +340,14 @@ describe("TPS status", () => {
     const rounded = createHarness();
     tpsStatus(rounded.pi);
     await rounded.fire("before_agent_start");
+    await rounded.fire("turn_start");
+    await rounded.fire("before_provider_request");
     vi.advanceTimersByTime(251);
     expect(rounded.setWorkingMessage.mock.calls.length).toBeGreaterThan(1);
     await rounded.fire("session_shutdown");
   });
 
-  it("handles out-of-order events and commits a response without updates", async () => {
+  it("handles out-of-order events without inventing timing for final-only responses", async () => {
     writeSettings(agentDir, { "pi-tps-status": { refreshMs: "fast" } });
     const harness = createHarness();
     tpsStatus(harness.pi);
@@ -339,10 +362,12 @@ describe("TPS status", () => {
 
     await harness.fire("agent_start");
     await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
     await harness.fire("message_update", {
       message: { role: "assistant", usage: { output: 3 } },
       assistantMessageEvent: null,
     });
+    await stream(harness, "x".repeat(12));
     vi.advanceTimersByTime(100);
     await harness.fire("tool_execution_start", { toolName: "bash", toolCallId: "open" });
     vi.advanceTimersByTime(100);
@@ -355,11 +380,13 @@ describe("TPS status", () => {
     tpsStatus(directCommit.pi);
     await directCommit.fire("agent_start");
     await directCommit.fire("turn_start");
+    await directCommit.fire("before_provider_request");
     vi.advanceTimersByTime(100);
     await directCommit.fire("message_end", {
       message: { role: "assistant", usage: { output: 5 } },
     });
-    expect(directCommit.setStatus.mock.calls.at(-1)?.[1]).toContain("50.0 tok/s");
+    // Final usage alone cannot supply a first-output timestamp.
+    expect(directCommit.setStatus).not.toHaveBeenCalled();
     await directCommit.fire("agent_settled");
   });
 
@@ -369,6 +396,8 @@ describe("TPS status", () => {
     tpsStatus(malformed.pi);
     await malformed.fire("session_start");
     await malformed.fire("before_agent_start");
+    await malformed.fire("turn_start");
+    await malformed.fire("before_provider_request");
     expect(malformed.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 0ms…");
     await malformed.fire("session_shutdown");
 

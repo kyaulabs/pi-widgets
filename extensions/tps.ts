@@ -33,6 +33,7 @@ const HELP_TEXT = [
   "  /tps ttft on|off|toggle      Show or hide TTFT on the Working line",
   "  /tps help                    Show this help",
   "",
+  "tok/s measures generation after first output; TTFT is this response's initial wait.",
   "Command changes last for the current session. Persistent defaults are under",
   `"${CONFIG_FIELD}" in ~/.pi/agent/settings.json.`,
 ].join("\n");
@@ -47,17 +48,15 @@ type RuntimeConfig = {
 };
 
 type Measurement = {
-  requestStartedAt?: number;
-  firstTokenAt?: number;
-  completedAt?: number;
-  excludedShellMs: number;
-  shellPausedAt?: number;
+  llmMs: number;
+  runningSince?: number;
+  firstTokenMs?: number;
+  ttftKnown: boolean;
   completedOutputTokens: number;
-  currentExactOutputTokens?: number;
+  completedGenerationMs: number;
   currentGeneratedCodePoints: number;
   responseOpen: boolean;
   active: boolean;
-  complete: boolean;
 };
 
 const defaultConfig: RuntimeConfig = {
@@ -138,32 +137,37 @@ function estimatedCurrentOutputTokens(measurement: Measurement): number {
   return Math.ceil(measurement.currentGeneratedCodePoints / CODE_POINTS_PER_ESTIMATED_TOKEN);
 }
 
-function measuredOutputTokens(measurement: Measurement): number {
-  const current =
-    measurement.currentExactOutputTokens ?? estimatedCurrentOutputTokens(measurement);
-  return measurement.completedOutputTokens + current;
+function elapsedLlmMs(measurement: Measurement, now: number): number {
+  return measurement.llmMs + (measurement.runningSince === undefined
+    ? 0 : Math.max(0, now - measurement.runningSince));
+}
+
+function currentGenerationMs(measurement: Measurement, now: number): number {
+  if (measurement.firstTokenMs === undefined) return 0;
+  return elapsedLlmMs(measurement, now) - measurement.firstTokenMs;
+}
+
+function hasCurrentSample(measurement: Measurement, now: number): boolean {
+  return measurement.responseOpen && currentGenerationMs(measurement, now) >= 50;
 }
 
 function calculateTps(measurement: Measurement, now: number): number | undefined {
-  if (measurement.requestStartedAt === undefined || measurement.firstTokenAt === undefined) {
-    return undefined;
-  }
-  const tokens = measuredOutputTokens(measurement);
-  if (tokens <= 0) return undefined;
-
-  const end = measurement.completedAt ?? now;
-  const activeShellPauseMs =
-    measurement.shellPausedAt === undefined ? 0 : Math.max(0, end - measurement.shellPausedAt);
-  const interactionMs =
-    end - measurement.requestStartedAt - measurement.excludedShellMs - activeShellPauseMs;
-  if (!Number.isFinite(interactionMs) || interactionMs < 50) return undefined;
-  return tokens / (interactionMs / 1_000);
+  const includeCurrent = hasCurrentSample(measurement, now);
+  const tokens = measurement.completedOutputTokens +
+    (includeCurrent ? estimatedCurrentOutputTokens(measurement) : 0);
+  const durationMs = measurement.completedGenerationMs +
+    (includeCurrent ? currentGenerationMs(measurement, now) : 0);
+  if (tokens <= 0 || !Number.isFinite(durationMs) || durationMs < 50) return undefined;
+  return tokens / (durationMs / 1_000);
 }
 
 function calculateTtft(measurement: Measurement, now: number): { value: number; pending: boolean } | undefined {
-  if (measurement.requestStartedAt === undefined) return undefined;
-  const end = measurement.firstTokenAt ?? now;
-  return { value: Math.max(0, end - measurement.requestStartedAt), pending: measurement.firstTokenAt === undefined };
+  if (!measurement.ttftKnown ||
+    (measurement.firstTokenMs === undefined && !measurement.responseOpen)) return undefined;
+  return {
+    value: measurement.firstTokenMs ?? elapsedLlmMs(measurement, now),
+    pending: measurement.firstTokenMs === undefined,
+  };
 }
 
 function formatTps(value: number): string {
@@ -184,8 +188,8 @@ function formatWorkingLineMeasurement(
   now: number,
 ): string {
   const parts: string[] = [];
-  const tps = calculateTps(measurement, now);
-  if (tps !== undefined) parts.push(`${formatTps(tps)} tok/s`);
+  const status = formatStatusMeasurement(measurement, now);
+  if (status) parts.push(status);
   if (config.showTTFT) {
     const ttft = calculateTtft(measurement, now);
     if (ttft) parts.push(`TTFT ${formatDuration(ttft.value)}${ttft.pending ? "…" : ""}`);
@@ -195,7 +199,8 @@ function formatWorkingLineMeasurement(
 
 function formatStatusMeasurement(measurement: Measurement, now: number): string {
   const tps = calculateTps(measurement, now);
-  return tps !== undefined ? `${formatTps(tps)} tok/s` : "";
+  if (tps === undefined) return "";
+  return `${formatTps(tps)} tok/s`;
 }
 
 type TpsColor = {
@@ -271,14 +276,12 @@ function parseSwitch(value: string | undefined, current: boolean): boolean | und
 
 export default function tpsStatus(pi: ExtensionAPI): void {
   let config = loadConfig();
-  let measurement: Measurement = {
-    excludedShellMs: 0,
-    completedOutputTokens: 0,
-    currentGeneratedCodePoints: 0,
-    responseOpen: false,
-    active: false,
-    complete: false,
-  };
+  let measurement: Measurement = newMeasurement();
+  let turnOpen = false;
+  let compacting = false;
+  let waitingForUi = false;
+  let waitingForRetry = false;
+  let detachAbort: (() => void) | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
   let timerContext: ExtensionContext | undefined;
   let lastStatusText: string | undefined;
@@ -288,18 +291,27 @@ export default function tpsStatus(pi: ExtensionAPI): void {
   let lastRenderedAt = Number.NEGATIVE_INFINITY;
   let ownsWorkingMessage = false;
   let usesZentuiWorkingLineSegments = false;
-  const activeShellToolCalls = new Set<string>();
 
-  function resetMeasurement(): void {
-    activeShellToolCalls.clear();
-    measurement = {
-      excludedShellMs: 0,
+  function newMeasurement(): Measurement {
+    return {
+      llmMs: 0,
+      ttftKnown: false,
       completedOutputTokens: 0,
+      completedGenerationMs: 0,
       currentGeneratedCodePoints: 0,
       responseOpen: false,
       active: false,
-      complete: false,
     };
+  }
+
+  function resetMeasurement(): void {
+    detachAbort?.();
+    detachAbort = undefined;
+    measurement = newMeasurement();
+    turnOpen = false;
+    compacting = false;
+    waitingForUi = false;
+    waitingForRetry = false;
   }
 
   function stopTimer(): void {
@@ -368,7 +380,7 @@ export default function tpsStatus(pi: ExtensionAPI): void {
       clearStatus(ctx);
     }
 
-    if (config.workingLine && measurement.active && workingText) {
+    if (config.workingLine && measurement.runningSince !== undefined && workingText) {
       if (workingText !== lastWorkingText) {
         if (usesZentuiWorkingLineSegments) {
           pi.events.emit(ZENTUI_WORKING_LINE_SEGMENT_EVENT, {
@@ -382,7 +394,7 @@ export default function tpsStatus(pi: ExtensionAPI): void {
         lastWorkingText = workingText;
       }
     } else {
-      clearWorkingLine(ctx);
+      clearWorkingLine(ctx, true);
     }
   }
 
@@ -398,44 +410,59 @@ export default function tpsStatus(pi: ExtensionAPI): void {
     const capability = { supported: false, active: false };
     pi.events.emit(ZENTUI_WORKING_LINE_SEGMENT_CAPABILITY_EVENT, capability);
     usesZentuiWorkingLineSegments = capability.active;
-    const now = monotonicNow();
-    activeShellToolCalls.clear();
-    measurement = {
-      requestStartedAt: now,
-      excludedShellMs: 0,
-      completedOutputTokens: 0,
-      currentGeneratedCodePoints: 0,
-      responseOpen: false,
-      active: true,
-      complete: false,
-    };
-    if (config.enabled) startTimer(ctx);
-    render(ctx, now, true);
-  }
-
-  function startResponse(ctx: ExtensionContext): void {
-    if (!measurement.active) beginInteraction(ctx);
-    measurement.currentExactOutputTokens = undefined;
-    measurement.currentGeneratedCodePoints = 0;
-    measurement.responseOpen = true;
+    measurement = newMeasurement();
+    measurement.active = true;
     render(ctx, monotonicNow(), true);
   }
 
-  function acceptStreamUpdate(message: unknown, assistantEvent: unknown, ctx: ExtensionContext): void {
+  function pauseClock(ctx: ExtensionContext): void {
+    const now = monotonicNow();
+    measurement.llmMs = elapsedLlmMs(measurement, now);
+    measurement.runningSince = undefined;
+    stopTimer();
+    render(ctx, now, true);
+  }
+
+  function resumeClock(ctx: ExtensionContext): void {
+    if (!measurement.responseOpen || waitingForUi || waitingForRetry) return;
+    measurement.runningSince ??= monotonicNow();
+    if (config.enabled) startTimer(ctx);
+    render(ctx, monotonicNow(), true);
+  }
+
+  function startResponse(ctx: ExtensionContext, ttftKnown = false): void {
+    // A turn arms the meter; only a provider request starts the clock. Context hooks,
+    // authentication and compaction can all run after turn_start but before this point.
+    const signal = ctx.signal;
+    if (!turnOpen || compacting || signal?.aborted) return;
+    if (!measurement.responseOpen) {
+      measurement.llmMs = 0;
+      measurement.firstTokenMs = undefined;
+      measurement.ttftKnown = ttftKnown;
+      if (signal) {
+        const onAbort = () => closeTurn(ctx);
+        signal.addEventListener("abort", onAbort, { once: true });
+        detachAbort = () => signal.removeEventListener("abort", onAbort);
+      }
+    }
+    measurement.responseOpen = true;
+    waitingForRetry = false;
+    resumeClock(ctx);
+  }
+
+  function acceptStreamUpdate(assistantEvent: unknown, ctx: ExtensionContext): void {
     if (!measurement.active || !measurement.responseOpen) return;
     const now = monotonicNow();
     const delta = streamedDelta(assistantEvent);
-    const isFirstToken = delta !== undefined && measurement.firstTokenAt === undefined;
+    const isFirstToken = delta !== undefined && measurement.firstTokenMs === undefined;
     if (delta !== undefined) {
-      if (isFirstToken) measurement.firstTokenAt = now;
+      if (isFirstToken) measurement.firstTokenMs = elapsedLlmMs(measurement, now);
       measurement.currentGeneratedCodePoints += countCodePoints(delta);
     }
 
-    const exactOutput = outputTokensFromMessage(message);
-    if (exactOutput !== undefined && exactOutput > 0) {
-      measurement.currentExactOutputTokens = exactOutput;
-      if (measurement.firstTokenAt === undefined) measurement.firstTokenAt = now;
-    }
+    // Partial usage can be a stale snapshot, or include unstreamed reasoning.
+    // Only a real content delta establishes first-output timing; usage is finalized
+    // at message_end. Live token counts use the code-point estimate.
     render(ctx, now, isFirstToken);
   }
 
@@ -443,57 +470,34 @@ export default function tpsStatus(pi: ExtensionAPI): void {
     if (!measurement.active || !measurement.responseOpen) return;
     const now = monotonicNow();
     const exactOutput = outputTokensFromMessage(message);
-    if (exactOutput !== undefined && exactOutput > 0) {
-      measurement.currentExactOutputTokens = exactOutput;
+    // Zero usage on an interrupted stream is often a provider placeholder.
+    const hasExactOutput = exactOutput !== undefined && exactOutput > 0;
+    const responseTokens = hasExactOutput ? exactOutput : estimatedCurrentOutputTokens(measurement);
+    if (hasCurrentSample(measurement, now) && responseTokens > 0) {
+      measurement.completedOutputTokens += responseTokens;
+      measurement.completedGenerationMs += currentGenerationMs(measurement, now);
     }
-    const responseTokens =
-      measurement.currentExactOutputTokens ?? estimatedCurrentOutputTokens(measurement);
-    measurement.completedOutputTokens += responseTokens;
-    if (measurement.firstTokenAt === undefined && responseTokens > 0) {
-      measurement.firstTokenAt = now;
-    }
-    measurement.currentExactOutputTokens = undefined;
+    // Untimed/buffered responses must not add tokens without matching generation
+    // time. Keep the previous aggregate rather than inventing a duration.
     measurement.currentGeneratedCodePoints = 0;
     measurement.responseOpen = false;
-    render(ctx, now, true);
+    waitingForRetry = false;
+    detachAbort?.();
+    detachAbort = undefined;
+    pauseClock(ctx);
   }
 
-  function pauseShellAveraging(toolCallId: string, ctx: ExtensionContext): void {
-    if (!measurement.active || activeShellToolCalls.has(toolCallId)) return;
-    activeShellToolCalls.add(toolCallId);
-    if (activeShellToolCalls.size !== 1) return;
-
-    const now = monotonicNow();
-    measurement.shellPausedAt = now;
-    render(ctx, now, true);
-  }
-
-  function resumeShellAveraging(toolCallId: string, ctx: ExtensionContext): void {
-    if (!activeShellToolCalls.delete(toolCallId) || activeShellToolCalls.size > 0) return;
-
-    const now = monotonicNow();
-    if (measurement.shellPausedAt !== undefined) {
-      measurement.excludedShellMs += Math.max(0, now - measurement.shellPausedAt);
-      measurement.shellPausedAt = undefined;
-    }
-    render(ctx, now, true);
+  function closeTurn(ctx: ExtensionContext): void {
+    commitResponse(undefined, ctx);
+    turnOpen = false;
   }
 
   function finishInteraction(ctx: ExtensionContext): void {
     if (!measurement.active) return;
-    if (measurement.responseOpen) commitResponse(undefined, ctx);
-    const now = monotonicNow();
-    if (measurement.shellPausedAt !== undefined) {
-      measurement.excludedShellMs += Math.max(0, now - measurement.shellPausedAt);
-      measurement.shellPausedAt = undefined;
-    }
-    activeShellToolCalls.clear();
+    closeTurn(ctx);
     measurement.active = false;
-    measurement.complete = true;
-    measurement.completedAt = now;
     stopTimer();
-    render(ctx, now, true);
-    clearWorkingLine(ctx);
+    render(ctx, monotonicNow(), true);
   }
 
   function applyRuntimeSwitch(
@@ -504,7 +508,7 @@ export default function tpsStatus(pi: ExtensionAPI): void {
     config = { ...config, [target]: value };
     if (target === "enabled") {
       if (!value) stopTimer();
-      else if (measurement.active) startTimer(ctx);
+      else if (measurement.runningSince !== undefined) startTimer(ctx);
     }
     render(ctx, monotonicNow(), true);
   }
@@ -585,37 +589,67 @@ export default function tpsStatus(pi: ExtensionAPI): void {
     if (!measurement.active) beginInteraction(ctx);
   });
 
-  pi.on("turn_start", (_event, ctx) => startResponse(ctx));
-
-  pi.on("tool_execution_start", (event, ctx) => {
-    if (event.toolName === "bash" || event.toolName === "powershell") {
-      pauseShellAveraging(event.toolCallId, ctx);
-    }
+  pi.on("turn_start", (_event, ctx) => {
+    if (!measurement.active) beginInteraction(ctx);
+    closeTurn(ctx);
+    turnOpen = true;
   });
 
-  pi.on("tool_execution_end", (event, ctx) => {
-    if (event.toolName === "bash" || event.toolName === "powershell") {
-      resumeShellAveraging(event.toolCallId, ctx);
-    }
+  pi.on("before_provider_request", (_event, ctx) => startResponse(ctx, true));
+
+  pi.on("message_start", (event, ctx) => {
+    // Conservative fallback for custom providers without a payload hook. Never start
+    // at turn_start: that would meter local preparation and compaction as LLM time.
+    if (event.message.role === "assistant") startResponse(ctx);
+  });
+
+  pi.on("after_provider_response", (event, ctx) => {
+    if (!measurement.responseOpen) return;
+    waitingForRetry = event.status < 200 || event.status >= 300;
+    if (waitingForRetry) pauseClock(ctx);
+    else resumeClock(ctx);
+  });
+
+  // These are defensive boundaries for interrupted/missing message_end events.
+  // Normal tools (including permission gates and nested LLM tools) are already
+  // outside the request window, regardless of tool name or parallel execution.
+  pi.on("tool_execution_start", (_event, ctx) => closeTurn(ctx));
+  pi.on("turn_end", (_event, ctx) => closeTurn(ctx));
+
+  pi.on("session_before_compact", (_event, ctx) => {
+    commitResponse(undefined, ctx);
+    compacting = true;
+  });
+  pi.on("session_compact", () => { compacting = false; });
+  pi.on("session_compact_failed", () => { compacting = false; });
+
+  pi.on("ui_prompt_start", (_event, ctx) => {
+    waitingForUi = true;
+    pauseClock(ctx);
+  });
+  pi.on("ui_prompt_end", (_event, ctx) => {
+    waitingForUi = false;
+    resumeClock(ctx);
   });
 
   pi.on("message_update", (event, ctx) => {
     if (event.message.role !== "assistant") return;
     acceptStreamUpdate(
-      event.message,
       "assistantMessageEvent" in event ? event.assistantMessageEvent : undefined,
       ctx,
     );
   });
 
   pi.on("message_end", (event, ctx) => {
-    if (event.message.role === "assistant") commitResponse(event.message, ctx);
+    if (event.message.role === "assistant" && !compacting) {
+      commitResponse(event.message, ctx);
+      turnOpen = false;
+    }
   });
 
   pi.on("agent_end", (_event, ctx) => {
-    // The interaction may continue through retries, compaction, or queued follow-ups.
-    // Keep the same prompt-level clock and accumulated output until agent_settled.
-    if (measurement.active) render(ctx, monotonicNow(), true);
+    // Preserve totals for retries/queued follow-ups, but never time the gap.
+    closeTurn(ctx);
   });
 
   pi.on("agent_settled", (_event, ctx) => finishInteraction(ctx));
