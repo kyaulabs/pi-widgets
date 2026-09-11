@@ -73,6 +73,29 @@ describe("GPT Fast mode status", () => {
     expect(harness.setStatus).toHaveBeenLastCalledWith("gpt-fast-mode", undefined);
   });
 
+  it.each(["openai", "openai-codex"])("supports gpt-6-astra on %s", async (provider) => {
+    const harness = createHarness({ model: { provider, id: "gpt-6-astra" } });
+    gptFastModeStatus(harness.pi);
+    const payload = { model: "gpt-6-astra", stream: true };
+
+    await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
+      undefined,
+    ]);
+    await handler(harness.command("fast").handler)("", harness.ctx);
+    expect(harness.notify).toHaveBeenLastCalledWith(
+      "GPT Fast mode enabled (service_tier: priority).",
+    );
+    await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
+      { ...payload, service_tier: "priority" },
+    ]);
+    expect(payload).toEqual({ model: "gpt-6-astra", stream: true });
+
+    await handler(harness.command("fast").handler)("", harness.ctx);
+    await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
+      undefined,
+    ]);
+  });
+
   it("warns when Fast mode is enabled for an unsupported or missing model", async () => {
     const harness = createHarness({ model: { provider: "anthropic", id: "claude" } });
     gptFastModeStatus(harness.pi);
