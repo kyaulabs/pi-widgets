@@ -1,6 +1,6 @@
 {
   "name": "@kyaulabs/pi-widgets",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Fast mode, token throughput, and time-to-first-token status widgets for Pi",
   "type": "module",
   "license": "AGPL-3.0-only",
