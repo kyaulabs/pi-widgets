@@ -6,7 +6,7 @@
 
 Status widgets for [Pi](https://github.com/earendil-works/pi-mono). The package contains two independent extensions:
 
-- `fast-mode.ts` toggles OpenAI's `priority` service tier and shows when Fast mode is active.
+- `fast-mode.ts` toggles OpenAI's Fast and Ultrafast service tiers and shows the active mode.
 - `tps.ts` reports token throughput and time to first token (TTFT) in Pi's footer and working line.
 
 ## Requirements
@@ -67,24 +67,35 @@ When the selected model is supported, the extension adds this field to the match
 
 ```json
 {
-  "service_tier": "priority"
+  "service_tier": "fast"
 }
 ```
 
-The extension leaves unsupported models and mismatched payloads unchanged. It warns when Fast mode is enabled while the current model is unsupported.
+Run `/ultrafast` to request `service_tier: "ultrafast"` for `gpt-6-astra` or
+`gpt-5.6-sol` on either provider. The footer shows `⚡ Ultrafast` in purple.
+GPT-5.6 Sol requires OpenAI preview access. Both tiers cost more than Standard;
+see OpenAI's [Fast](https://developers.openai.com/api/docs/guides/fast-mode) and
+[Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode) guides
+for pricing and availability restrictions. Provider authentication and account
+access still determine whether a request is accepted.
+
+The modes are mutually exclusive: enabling one replaces the other. Running the
+active mode's command again disables it. The existing shortcut toggles Fast only.
+Unsupported models and mismatched payloads are left unchanged, with a warning
+when the selected mode does not support the current model.
 
 ### Supported models
 
-Both the `openai` and `openai-codex` providers support these model IDs:
+The extension enables Fast requests on `openai` and `openai-codex` for the models
+in OpenAI's [Fast pricing table](https://developers.openai.com/api/docs/pricing?latest-pricing=fast):
 
-- `gpt-5.4`
-- `gpt-5.4-mini`
-- `gpt-5.5`
-- `gpt-5.6`
-- `gpt-5.6-sol`
-- `gpt-5.6-terra`
-- `gpt-5.6-luna`
-- `gpt-6-astra`
+- `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-6-luna`
+- `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`
+- `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.2`, `gpt-5.1`, `gpt-5`, `gpt-5-mini`
+- `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`, `gpt-4o`, `gpt-4o-2024-05-13`, `gpt-4o-mini`
+- `o3`, `o4-mini`
+
+The existing `gpt-5.6` alias remains supported. Unlisted models are not enabled automatically.
 
 ### Default state
 
@@ -98,7 +109,8 @@ Set the startup state under `pi-gpt-fast-mode` in `~/.pi/agent/settings.json`:
 }
 ```
 
-The `/fast` command changes only the current session. A new session reloads the configured default.
+The `/fast` and `/ultrafast` commands change only the current session. A new session
+reloads the configured Fast default; Ultrafast is never enabled automatically.
 
 ### Shortcut
 
