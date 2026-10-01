@@ -6,32 +6,66 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
+// Explicit support from OpenAI's Fast pricing table; retain the existing gpt-5.6 alias.
 const SUPPORTED_MODELS = new Set([
-  "openai/gpt-5.4",
-  "openai/gpt-5.4-mini",
-  "openai/gpt-5.5",
-  "openai/gpt-5.6",
-  "openai/gpt-5.6-sol",
-  "openai/gpt-5.6-terra",
-  "openai/gpt-5.6-luna",
-  "openai/gpt-6-astra",
-  "openai-codex/gpt-5.4",
-  "openai-codex/gpt-5.4-mini",
-  "openai-codex/gpt-5.5",
-  "openai-codex/gpt-5.6",
-  "openai-codex/gpt-5.6-sol",
-  "openai-codex/gpt-5.6-terra",
-  "openai-codex/gpt-5.6-luna",
-  "openai-codex/gpt-6-astra",
+  "gpt-6-astra",
+  "gpt-6.1-sol",
+  "gpt-6-sol",
+  "gpt-6-luna",
+  "gpt-5.6",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.2",
+  "gpt-5.1",
+  "gpt-5",
+  "gpt-5-mini",
+  "gpt-4.1",
+  "gpt-4.1-mini",
+  "gpt-4.1-nano",
+  "gpt-4o",
+  "gpt-4o-2024-05-13",
+  "gpt-4o-mini",
+  "o3",
+  "o4-mini",
+]);
+const ULTRAFAST_MODELS = new Set(["gpt-6-astra", "gpt-5.6-sol"]);
+// Flex has its own availability list; Fast support does not imply Flex support.
+const FLEX_MODELS = new Set([
+  "gpt-6-astra",
+  "gpt-6.1-sol",
+  "gpt-6-sol",
+  "gpt-6-luna",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "gpt-5.5",
+  "gpt-5.5-pro",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.4-nano",
+  "gpt-5.4-pro",
+  "gpt-5.2",
+  "gpt-5.1",
+  "gpt-5",
+  "gpt-5-mini",
+  "gpt-5-nano",
+  "o3",
+  "o4-mini",
 ]);
 
 const CONFIG_FIELD = "pi-gpt-fast-mode";
 const DEFAULT_SHORTCUT = "ctrl+alt+m";
-const FAST_SERVICE_TIER = "priority";
 const STATUS_KEY = "gpt-fast-mode";
 const STATUS_TEXT = " Fast";
+// Fixed purple; text presentation keeps the lightning glyph from becoming a yellow emoji.
+const ULTRAFAST_STATUS = "\u001b[38;5;141m⚡\uFE0E Ultrafast\u001b[39m";
 const RESERVED_SHORTCUTS = new Set(["ctrl+m", "enter", "return"]);
 
+type SpeedMode = "fast" | "ultrafast" | "flex";
 type PiModel = { provider?: string; id?: string };
 type JsonObject = Record<string, unknown>;
 
@@ -39,8 +73,15 @@ function modelKey(model: PiModel): string {
   return `${model.provider}/${model.id}`;
 }
 
-function isSupportedModel(model: PiModel | undefined): boolean {
-  return Boolean(model?.provider && model.id && SUPPORTED_MODELS.has(modelKey(model)));
+function isSupportedModel(model: PiModel | undefined, mode: SpeedMode): boolean {
+  const models = mode === "ultrafast"
+    ? ULTRAFAST_MODELS
+    : mode === "flex" ? FLEX_MODELS : SUPPORTED_MODELS;
+  return Boolean(
+    (model?.provider === "openai" || model?.provider === "openai-codex") &&
+      model.id &&
+      models.has(model.id),
+  );
 }
 
 function expandHome(input: string, home: string): string {
@@ -104,46 +145,59 @@ function loadShortcuts(): string[] {
 }
 
 export default function gptFastModeStatus(pi: ExtensionAPI): void {
-  let enabled = loadDefaultEnabled();
+  let mode: SpeedMode | undefined = loadDefaultEnabled() ? "fast" : undefined;
 
   function updateStatus(ctx: ExtensionContext): void {
     ctx.ui.setStatus(
       STATUS_KEY,
-      enabled ? ctx.ui.theme.fg("warning", STATUS_TEXT) : undefined,
+      mode === "ultrafast"
+        ? ULTRAFAST_STATUS
+        : mode === "fast"
+          ? ctx.ui.theme.fg("warning", STATUS_TEXT)
+          : mode === "flex"
+            ? ctx.ui.theme.fg("success", "󰿗 Flex")
+            : undefined,
     );
   }
 
-  function announceState(ctx: ExtensionContext): void {
-    if (!enabled) {
-      ctx.ui.notify("GPT Fast mode disabled.");
-    } else if (isSupportedModel(ctx.model)) {
-      ctx.ui.notify(`GPT Fast mode enabled (service_tier: ${FAST_SERVICE_TIER}).`);
+  function toggle(ctx: ExtensionContext, requested: SpeedMode): void {
+    mode = mode === requested ? undefined : requested;
+    updateStatus(ctx);
+    const label = requested === "ultrafast"
+      ? "Ultrafast"
+      : requested === "flex" ? "Flex" : "Fast";
+    if (!mode) {
+      ctx.ui.notify(`GPT ${label} mode disabled.`);
+    } else if (isSupportedModel(ctx.model, mode)) {
+      ctx.ui.notify(`GPT ${label} mode enabled (service_tier: ${mode}).`);
     } else {
       const model = ctx.model ? modelKey(ctx.model) : "unknown model";
-      ctx.ui.notify(`GPT Fast mode enabled, but ${model} is not supported.`, "warning");
+      ctx.ui.notify(`GPT ${label} mode enabled, but ${model} is not supported.`, "warning");
     }
   }
 
-  function toggle(ctx: ExtensionContext): void {
-    enabled = !enabled;
-    updateStatus(ctx);
-    announceState(ctx);
-  }
-
   pi.registerCommand("fast", {
-    description: "Toggle GPT Fast mode (service_tier: priority)",
-    handler: async (_args, ctx) => toggle(ctx),
+    description: "Toggle GPT Fast mode (service_tier: fast)",
+    handler: async (_args, ctx) => toggle(ctx, "fast"),
+  });
+  pi.registerCommand("ultrafast", {
+    description: "Toggle GPT Ultrafast mode (service_tier: ultrafast)",
+    handler: async (_args, ctx) => toggle(ctx, "ultrafast"),
+  });
+  pi.registerCommand("flex", {
+    description: "Toggle GPT Flex mode (service_tier: flex)",
+    handler: async (_args, ctx) => toggle(ctx, "flex"),
   });
 
   for (const shortcut of loadShortcuts()) {
     pi.registerShortcut(shortcut as Parameters<ExtensionAPI["registerShortcut"]>[0], {
       description: "Toggle GPT Fast mode",
-      handler: async (ctx) => toggle(ctx),
+      handler: async (ctx) => toggle(ctx, "fast"),
     });
   }
 
   pi.on("session_start", (_event, ctx) => {
-    enabled = loadDefaultEnabled();
+    mode = loadDefaultEnabled() ? "fast" : undefined;
     updateStatus(ctx);
   });
 
@@ -152,13 +206,13 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
   });
 
   pi.on("before_provider_request", (event, ctx) => {
-    if (!enabled || !isSupportedModel(ctx.model)) return undefined;
+    if (!mode || !isSupportedModel(ctx.model, mode)) return undefined;
     if (!event.payload || typeof event.payload !== "object") return undefined;
     if ((event.payload as JsonObject).model !== ctx.model?.id) return undefined;
 
     return {
       ...(event.payload as JsonObject),
-      service_tier: FAST_SERVICE_TIER,
+      service_tier: mode,
     };
   });
 }
