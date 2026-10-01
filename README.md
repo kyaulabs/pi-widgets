@@ -6,7 +6,7 @@
 
 Status widgets for [Pi](https://github.com/earendil-works/pi-mono). The package contains two independent extensions:
 
-- `fast-mode.ts` toggles OpenAI's Fast and Ultrafast service tiers and shows the active mode.
+- `fast-mode.ts` toggles OpenAI's Fast, Ultrafast, and Flex service tiers and shows the active mode.
 - `tps.ts` reports token throughput and time to first token (TTFT) in Pi's footer and working line.
 
 ## Requirements
@@ -79,7 +79,19 @@ see OpenAI's [Fast](https://developers.openai.com/api/docs/guides/fast-mode) and
 for pricing and availability restrictions. Provider authentication and account
 access still determine whether a request is accepted.
 
-The modes are mutually exclusive: enabling one replaces the other. Running the
+Run `/flex` to request `service_tier: "flex"`, with a green `󰿗 Flex` footer status.
+Flex offers lower costs in exchange for slower responses and occasional resource
+unavailability. The extension uses the model list in OpenAI's
+[Flex pricing table](https://developers.openai.com/api/docs/pricing?latest-pricing=flex):
+`gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`,
+`gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`,
+`gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.4-pro`, `gpt-5.2`, `gpt-5.1`, `gpt-5`,
+`gpt-5-mini`, `gpt-5-nano`, `o3`, and `o4-mini`, on either provider.
+See the [Flex guide](https://developers.openai.com/api/docs/guides/flex-processing?api-mode=responses)
+for availability and timeout guidance. This command does not change provider
+timeouts or retries, or automatically fall back to a higher-cost tier.
+
+All three modes are mutually exclusive: enabling one replaces the other. Running the
 active mode's command again disables it. The existing shortcut toggles Fast only.
 Unsupported models and mismatched payloads are left unchanged, with a warning
 when the selected mode does not support the current model.
@@ -109,8 +121,9 @@ Set the startup state under `pi-gpt-fast-mode` in `~/.pi/agent/settings.json`:
 }
 ```
 
-The `/fast` and `/ultrafast` commands change only the current session. A new session
-reloads the configured Fast default; Ultrafast is never enabled automatically.
+The `/fast`, `/ultrafast`, and `/flex` commands change only the current session.
+A new session reloads the configured Fast default; Ultrafast and Flex are never
+enabled automatically.
 
 ### Shortcut
 

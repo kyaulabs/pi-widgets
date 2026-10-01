@@ -139,6 +139,84 @@ describe("GPT Fast mode status", () => {
       .resolves.toEqual([undefined]);
   });
 
+  it.each(["openai", "openai-codex"].flatMap((provider) =>
+    ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna",
+      "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.5-pro",
+      "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4-pro", "gpt-5.2",
+      "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano", "o3", "o4-mini"]
+      .map((id) => ({ provider, id })),
+  ))("toggles Flex for $provider/$id", async (model) => {
+    const harness = createHarness({ model });
+    gptFastModeStatus(harness.pi);
+    const payload = { model: model.id, service_tier: "default", stream: true };
+    await handler(harness.command("flex").handler)("", harness.ctx);
+    expect(harness.setStatus).toHaveBeenLastCalledWith(
+      "gpt-fast-mode", "<success>󰿗 Flex</success>",
+    );
+    expect(harness.notify).toHaveBeenLastCalledWith(
+      "GPT Flex mode enabled (service_tier: flex).",
+    );
+    await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
+      { ...payload, service_tier: "flex" },
+    ]);
+    expect(payload.service_tier).toBe("default");
+    await expect(harness.fire("before_provider_request", {
+      payload: { model: "other" },
+    })).resolves.toEqual([undefined]);
+    await expect(harness.fire("before_provider_request", { payload: null }))
+      .resolves.toEqual([undefined]);
+    await handler(harness.command("flex").handler)("", harness.ctx);
+    expect(harness.setStatus).toHaveBeenLastCalledWith("gpt-fast-mode", undefined);
+    expect(harness.notify).toHaveBeenLastCalledWith("GPT Flex mode disabled.");
+    await expect(harness.fire("before_provider_request", { payload }))
+      .resolves.toEqual([undefined]);
+  });
+
+  it.each([
+    { provider: "openai", id: "gpt-4.1" },
+    { provider: "openai-codex", id: "gpt-5.6" },
+    { provider: "anthropic", id: "gpt-6-astra" },
+    undefined,
+  ])("leaves unsupported Flex requests unchanged for %j", async (model) => {
+    const harness = createHarness({ model });
+    gptFastModeStatus(harness.pi);
+    await handler(harness.command("flex").handler)("", harness.ctx);
+    const name = model ? `${model.provider}/${model.id}` : "unknown model";
+    expect(harness.notify).toHaveBeenLastCalledWith(
+      `GPT Flex mode enabled, but ${name} is not supported.`, "warning",
+    );
+    await expect(harness.fire("before_provider_request", {
+      payload: { model: model?.id },
+    })).resolves.toEqual([undefined]);
+  });
+
+  it("switches Flex with both faster tiers and resets to the configured Fast default", async () => {
+    writeJson(join(agentDir, "settings.json"), { "pi-gpt-fast-mode": { enabled: true } });
+    const harness = createHarness({ model: { provider: "openai", id: "gpt-6-astra" } });
+    gptFastModeStatus(harness.pi);
+    const payload = { model: "gpt-6-astra" };
+    for (const mode of ["flex", "fast", "flex", "ultrafast", "flex"]) {
+      await handler(harness.command(mode).handler)("", harness.ctx);
+      await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
+        { ...payload, service_tier: mode },
+      ]);
+    }
+    await harness.fire("session_shutdown");
+    expect(harness.setStatus).toHaveBeenLastCalledWith("gpt-fast-mode", undefined);
+    await harness.fire("session_start");
+    expect(harness.setStatus).toHaveBeenLastCalledWith(
+      "gpt-fast-mode", "<warning> Fast</warning>",
+    );
+    await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
+      { ...payload, service_tier: "fast" },
+    ]);
+    await handler(harness.command("flex").handler)("", harness.ctx);
+    writeJson(join(agentDir, "settings.json"), { "pi-gpt-fast-mode": { enabled: false } });
+    await harness.fire("session_start");
+    await expect(harness.fire("before_provider_request", { payload }))
+      .resolves.toEqual([undefined]);
+  });
+
   it("switches between mutually exclusive modes and resets to the session default", async () => {
     writeJson(join(agentDir, "settings.json"), { "pi-gpt-fast-mode": { enabled: true } });
     const harness = createHarness({ model: { provider: "openai", id: "gpt-6-astra" } });
