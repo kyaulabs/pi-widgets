@@ -33,6 +33,29 @@ const SUPPORTED_MODELS = new Set([
   "o4-mini",
 ]);
 const ULTRAFAST_MODELS = new Set(["gpt-6-astra", "gpt-5.6-sol"]);
+// Flex has its own availability list; Fast support does not imply Flex support.
+const FLEX_MODELS = new Set([
+  "gpt-6-astra",
+  "gpt-6.1-sol",
+  "gpt-6-sol",
+  "gpt-6-luna",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "gpt-5.5",
+  "gpt-5.5-pro",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.4-nano",
+  "gpt-5.4-pro",
+  "gpt-5.2",
+  "gpt-5.1",
+  "gpt-5",
+  "gpt-5-mini",
+  "gpt-5-nano",
+  "o3",
+  "o4-mini",
+]);
 
 const CONFIG_FIELD = "pi-gpt-fast-mode";
 const DEFAULT_SHORTCUT = "ctrl+alt+m";
@@ -42,7 +65,7 @@ const STATUS_TEXT = " Fast";
 const ULTRAFAST_STATUS = "\u001b[38;5;141m⚡\uFE0E Ultrafast\u001b[39m";
 const RESERVED_SHORTCUTS = new Set(["ctrl+m", "enter", "return"]);
 
-type SpeedMode = "fast" | "ultrafast";
+type SpeedMode = "fast" | "ultrafast" | "flex";
 type PiModel = { provider?: string; id?: string };
 type JsonObject = Record<string, unknown>;
 
@@ -51,7 +74,9 @@ function modelKey(model: PiModel): string {
 }
 
 function isSupportedModel(model: PiModel | undefined, mode: SpeedMode): boolean {
-  const models = mode === "ultrafast" ? ULTRAFAST_MODELS : SUPPORTED_MODELS;
+  const models = mode === "ultrafast"
+    ? ULTRAFAST_MODELS
+    : mode === "flex" ? FLEX_MODELS : SUPPORTED_MODELS;
   return Boolean(
     (model?.provider === "openai" || model?.provider === "openai-codex") &&
       model.id &&
@@ -129,14 +154,18 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
         ? ULTRAFAST_STATUS
         : mode === "fast"
           ? ctx.ui.theme.fg("warning", STATUS_TEXT)
-          : undefined,
+          : mode === "flex"
+            ? ctx.ui.theme.fg("success", "󰿗 Flex")
+            : undefined,
     );
   }
 
   function toggle(ctx: ExtensionContext, requested: SpeedMode): void {
     mode = mode === requested ? undefined : requested;
     updateStatus(ctx);
-    const label = requested === "ultrafast" ? "Ultrafast" : "Fast";
+    const label = requested === "ultrafast"
+      ? "Ultrafast"
+      : requested === "flex" ? "Flex" : "Fast";
     if (!mode) {
       ctx.ui.notify(`GPT ${label} mode disabled.`);
     } else if (isSupportedModel(ctx.model, mode)) {
@@ -154,6 +183,10 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
   pi.registerCommand("ultrafast", {
     description: "Toggle GPT Ultrafast mode (service_tier: ultrafast)",
     handler: async (_args, ctx) => toggle(ctx, "ultrafast"),
+  });
+  pi.registerCommand("flex", {
+    description: "Toggle GPT Flex mode (service_tier: flex)",
+    handler: async (_args, ctx) => toggle(ctx, "flex"),
   });
 
   for (const shortcut of loadShortcuts()) {
