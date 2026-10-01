@@ -66,6 +66,7 @@ const ULTRAFAST_STATUS = "\u001b[38;5;141m⚡\uFE0E Ultrafast\u001b[39m";
 const RESERVED_SHORTCUTS = new Set(["ctrl+m", "enter", "return"]);
 
 type SpeedMode = "fast" | "ultrafast" | "flex";
+const SERVICE_TIERS = { fast: "priority", ultrafast: "ultrafast", flex: "flex" } as const;
 type PiModel = { provider?: string; id?: string };
 type JsonObject = Record<string, unknown>;
 
@@ -169,7 +170,7 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
     if (!mode) {
       ctx.ui.notify(`GPT ${label} mode disabled.`);
     } else if (isSupportedModel(ctx.model, mode)) {
-      ctx.ui.notify(`GPT ${label} mode enabled (service_tier: ${mode}).`);
+      ctx.ui.notify(`GPT ${label} mode enabled (service_tier: ${SERVICE_TIERS[mode]}).`);
     } else {
       const model = ctx.model ? modelKey(ctx.model) : "unknown model";
       ctx.ui.notify(`GPT ${label} mode enabled, but ${model} is not supported.`, "warning");
@@ -177,7 +178,7 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
   }
 
   pi.registerCommand("fast", {
-    description: "Toggle GPT Fast mode (service_tier: fast)",
+    description: "Toggle GPT Fast mode (service_tier: priority)",
     handler: async (_args, ctx) => toggle(ctx, "fast"),
   });
   pi.registerCommand("ultrafast", {
@@ -212,7 +213,7 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
 
     return {
       ...(event.payload as JsonObject),
-      service_tier: mode,
+      service_tier: SERVICE_TIERS[mode],
     };
   });
 }
