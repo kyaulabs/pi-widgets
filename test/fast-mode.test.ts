@@ -48,14 +48,14 @@ describe("GPT Fast mode status", () => {
       "<warning> Fast</warning>",
     );
     expect(harness.notify).toHaveBeenLastCalledWith(
-      "GPT Fast mode enabled (service_tier: fast).",
+      "GPT Fast mode enabled (service_tier: priority).",
     );
 
     await expect(
       harness.fire("before_provider_request", {
         payload: { model: "gpt-5.4", stream: true },
       }),
-    ).resolves.toEqual([{ model: "gpt-5.4", stream: true, service_tier: "fast" }]);
+    ).resolves.toEqual([{ model: "gpt-5.4", stream: true, service_tier: "priority" }]);
     await expect(
       harness.fire("before_provider_request", { payload: { model: "another-model" } }),
     ).resolves.toEqual([undefined]);
@@ -83,10 +83,10 @@ describe("GPT Fast mode status", () => {
     ]);
     await handler(harness.command("fast").handler)("", harness.ctx);
     expect(harness.notify).toHaveBeenLastCalledWith(
-      "GPT Fast mode enabled (service_tier: fast).",
+      "GPT Fast mode enabled (service_tier: priority).",
     );
     await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
-      { ...payload, service_tier: "fast" },
+      { ...payload, service_tier: "priority" },
     ]);
     expect(payload).toEqual({ model: "gpt-6-astra", stream: true });
 
@@ -107,7 +107,7 @@ describe("GPT Fast mode status", () => {
     await handler(harness.command("fast").handler)("", harness.ctx);
     await expect(harness.fire("before_provider_request", {
       payload: { model: model.id },
-    })).resolves.toEqual([{ model: model.id, service_tier: "fast" }]);
+    })).resolves.toEqual([{ model: model.id, service_tier: "priority" }]);
   });
 
   it.each(["openai", "openai-codex"].flatMap((provider) =>
@@ -198,7 +198,7 @@ describe("GPT Fast mode status", () => {
     for (const mode of ["flex", "fast", "flex", "ultrafast", "flex"]) {
       await handler(harness.command(mode).handler)("", harness.ctx);
       await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
-        { ...payload, service_tier: mode },
+        { ...payload, service_tier: mode === "fast" ? "priority" : mode },
       ]);
     }
     await harness.fire("session_shutdown");
@@ -208,7 +208,7 @@ describe("GPT Fast mode status", () => {
       "gpt-fast-mode", "<warning> Fast</warning>",
     );
     await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
-      { ...payload, service_tier: "fast" },
+      { ...payload, service_tier: "priority" },
     ]);
     await handler(harness.command("flex").handler)("", harness.ctx);
     writeJson(join(agentDir, "settings.json"), { "pi-gpt-fast-mode": { enabled: false } });
@@ -231,14 +231,14 @@ describe("GPT Fast mode status", () => {
       "gpt-fast-mode", "<warning> Fast</warning>",
     );
     await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
-      { ...payload, service_tier: "fast" },
+      { ...payload, service_tier: "priority" },
     ]);
     await handler(harness.command("ultrafast").handler)("", harness.ctx);
     await harness.fire("session_shutdown");
     expect(harness.setStatus).toHaveBeenLastCalledWith("gpt-fast-mode", undefined);
     await harness.fire("session_start");
     await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
-      { ...payload, service_tier: "fast" },
+      { ...payload, service_tier: "priority" },
     ]);
     writeJson(join(agentDir, "settings.json"), { "pi-gpt-fast-mode": { enabled: false } });
     await harness.fire("session_start");
@@ -314,7 +314,7 @@ describe("GPT Fast mode status", () => {
     );
     await expect(
       harness.fire("before_provider_request", { payload: { model: "gpt-5.6" } }),
-    ).resolves.toEqual([{ model: "gpt-5.6", service_tier: "fast" }]);
+    ).resolves.toEqual([{ model: "gpt-5.6", service_tier: "priority" }]);
   });
 
   it("supports disabling shortcuts and falls back from invalid scalar values", () => {

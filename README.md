@@ -63,11 +63,12 @@ loading duplicate widgets. Commands, settings keys, and shortcuts are unchanged.
 
 Fast mode is disabled by default. Run `/fast` or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd> to toggle it for the current session. The ` Fast` footer status appears while it is enabled.
 
-When the selected model is supported, the extension adds this field to the matching provider request:
+When the selected model is supported, the extension sends the API-compatible
+`priority` value for Fast mode in the matching provider request:
 
 ```json
 {
-  "service_tier": "fast"
+  "service_tier": "priority"
 }
 ```
 
