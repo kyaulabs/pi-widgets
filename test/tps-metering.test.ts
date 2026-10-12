@@ -51,7 +51,7 @@ describe("TPS provider timing", () => {
     expect(harness.setStatus.mock.calls.at(-1)?.[1]).toContain(`${value} tok/s`);
   }
 
-  it("excludes prompt hooks, context preparation and credential setup from TPS and TTFT", async () => {
+  it("excludes prompt hooks, context preparation and credential setup from throughput and latency", async () => {
     await harness.fire("before_agent_start");
     vi.advanceTimersByTime(5_000);
     await harness.fire("agent_start");
@@ -62,8 +62,9 @@ describe("TPS provider timing", () => {
     expect(harness.setWorkingMessage).not.toHaveBeenCalled();
     expect(await harness.fire("before_provider_request", { payload: {} })).toEqual([undefined]);
     vi.advanceTimersByTime(100);
+    await harness.fire("provider_stream_event", { data: { type: "response.created" } });
     await output(10, 100);
-    expectTps("100");
+    expectTps("50.0");
     expect(harness.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 100ms");
     await end();
   });
@@ -75,13 +76,19 @@ describe("TPS provider timing", () => {
       vi.advanceTimersByTime(1_000);
       await output();
       await end();
-      expectTps("10.0");
+      expectTps("5.0");
       expect(vi.getTimerCount()).toBe(0);
       const calls = harness.setStatus.mock.calls.length;
       vi.advanceTimersByTime(1_000);
       await harness.fire("tool_execution_start", { toolName, toolCallId: "one" });
       await harness.fire("tool_call", { toolName, toolCallId: "one" });
       vi.advanceTimersByTime(10_000);
+      // Nested model calls inside tools must not arm or contaminate the meter.
+      await harness.fire("before_provider_request");
+      await harness.fire("provider_stream_event", { data: { type: "response.created" } });
+      await harness.fire("message_start", { message: { role: "assistant" } });
+      await output(100_000);
+      await end(100_000);
       await harness.fire("tool_result", { toolName, usage: { output: 100_000 } });
       await harness.fire("tool_execution_end", { toolName, toolCallId: "one" });
       await harness.fire("message_end", {
@@ -99,7 +106,7 @@ describe("TPS provider timing", () => {
       await harness.fire("agent_end");
       vi.advanceTimersByTime(5_000);
       await harness.fire("agent_settled");
-      expectTps("20.0"); // 40 tokens / 2 seconds of generation time
+      expectTps("10.0"); // 40 tokens / 4 seconds of matching request time
     },
   );
 
@@ -117,17 +124,17 @@ describe("TPS provider timing", () => {
       vi.advanceTimersByTime(60_000);
       await output(100_000);
       await end(100_000);
-      expectTps("10.0");
+      expectTps("5.0");
       expect(vi.getTimerCount()).toBe(0);
       await harness.fire(outcome, { aborted: outcome === "session_compact_failed" });
       vi.advanceTimersByTime(5_000);
-      expectTps("10.0");
+      expectTps("5.0");
       await harness.fire("before_provider_request");
       vi.advanceTimersByTime(1_000);
       await output();
       await end();
       await harness.fire("agent_settled");
-      expectTps("10.0");
+      expectTps("5.0");
     },
   );
 
@@ -155,6 +162,7 @@ describe("TPS provider timing", () => {
     await harness.fire("agent_start");
     await request();
     vi.advanceTimersByTime(100);
+    await harness.fire("provider_stream_event", { data: { type: "response.created" } });
     await output();
     expect(harness.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 100ms");
     await end();
@@ -167,10 +175,10 @@ describe("TPS provider timing", () => {
     await output(30);
     await end(30);
     await harness.fire("agent_settled");
-    expectTps("20.0");
+    expectTps("13.8");
   });
 
-  it("pauses TPS and pending TTFT for blocking UI, including overlapping lifecycle events", async () => {
+  it("excludes blocking UI from throughput and first-event latency, including overlapping lifecycle events", async () => {
     await request();
     vi.advanceTimersByTime(100);
     await harness.fire("ui_prompt_start");
@@ -180,15 +188,16 @@ describe("TPS provider timing", () => {
     await harness.fire("ui_prompt_end");
     await harness.fire("ui_prompt_end");
     vi.advanceTimersByTime(100);
+    await harness.fire("provider_stream_event", { data: { type: "response.created" } });
     await output(10, 200);
-    expectTps("50.0");
+    expectTps("25.0");
     expect(harness.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 200ms");
     await harness.fire("ui_prompt_start");
     vi.advanceTimersByTime(30_000);
     await harness.fire("ui_prompt_end");
     vi.advanceTimersByTime(800);
     await end();
-    expectTps("10.0");
+    expectTps("8.3");
   });
 
   it("does not restart a completed response when a UI prompt closes", async () => {
@@ -201,10 +210,10 @@ describe("TPS provider timing", () => {
     await harness.fire("ui_prompt_end");
     expect(vi.getTimerCount()).toBe(0);
     await harness.fire("agent_settled");
-    expectTps("10.0");
+    expectTps("5.0");
   });
 
-  it("stops on agent_end even without message_end and freezes aborted no-output TTFT", async () => {
+  it("stops on agent_end even without message_end and clears pending latency after abort without output", async () => {
     await request();
     vi.advanceTimersByTime(1_000);
     await harness.fire("agent_end");
@@ -224,10 +233,10 @@ describe("TPS provider timing", () => {
     await harness.fire("agent_end");
     vi.advanceTimersByTime(30_000);
     await harness.fire("agent_settled");
-    expectTps("100");
+    expectTps("50.0");
   });
 
-  it("falls back to assistant stream start when a provider omits payload hooks", async () => {
+  it("does not use assistant message start as a fabricated request hook", async () => {
     await harness.fire("turn_start");
     vi.advanceTimersByTime(5_000);
     await harness.fire("message_start", { message: { role: "user" } });
@@ -236,7 +245,8 @@ describe("TPS provider timing", () => {
     vi.advanceTimersByTime(100);
     await output(10, 100);
     await end();
-    expectTps("100");
+    expect(harness.setStatus).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("stops immediately on abort even if the provider has not ended the message", async () => {
@@ -251,7 +261,7 @@ describe("TPS provider timing", () => {
     await output(100_000);
     await end(100_000);
     await harness.fire("agent_settled");
-    expectTps("100");
+    expectTps("50.0");
     await request(); // already aborted signals cannot start a new clock
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -275,7 +285,7 @@ describe("TPS provider timing", () => {
     vi.advanceTimersByTime(100);
     await output(10, 100);
     await end();
-    expectTps("100");
+    expectTps("50.0");
   });
 
   it.each([false, true])("releases the working line throughout non-LLM work (Zentui: %s)",
@@ -303,7 +313,7 @@ describe("TPS provider timing", () => {
       vi.advanceTimersByTime(1_000);
       await output();
       await end();
-      expectTps("10.0");
+      expectTps("5.0");
     },
   );
 
@@ -315,19 +325,73 @@ describe("TPS provider timing", () => {
     await harness.fire("before_provider_request");
     vi.advanceTimersByTime(100);
     await end();
-    expectTps("50.0");
+    expectTps("33.3");
   });
 
-  it("excludes observable HTTP retry backoff until the next request or successful stream", async () => {
+  it.each(["headers", "raw", "delta", "end"])(
+    "excludes an unhooked retry sample resumed via %s instead of shortening its denominator", async (resume) => {
     await request();
     vi.advanceTimersByTime(100);
     await harness.fire("after_provider_response", { status: 429 });
     vi.advanceTimersByTime(30_000);
     expect(vi.getTimerCount()).toBe(0);
-    await harness.fire("after_provider_response", { status: 200 });
+    if (resume === "headers") await harness.fire("after_provider_response", { status: 200 });
+    if (resume === "raw") await harness.fire("provider_stream_event", { data: {} });
     vi.advanceTimersByTime(100);
+    if (resume !== "end") await output(10, 200);
+    await end();
+    expect(harness.setStatus).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    await request();
+    await output(10);
+    await end();
+    expectTps("10.0");
+  });
+
+  it("includes known retry attempt time but excludes backoff when the request hook repeats", async () => {
+    await request();
+    vi.advanceTimersByTime(100);
+    await harness.fire("after_provider_response", { status: 429 });
+    vi.advanceTimersByTime(30_000);
+    await harness.fire("before_provider_request");
+    vi.advanceTimersByTime(100);
+    await harness.fire("after_provider_response", { status: 200 });
+    await harness.fire("provider_stream_event", { data: { type: "response.created" } });
     await output(10, 200);
+    expect(harness.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 200ms");
+    await end();
+    expectTps("25.0"); // 10 / (0.1 failed + 0.3 successful)
+    await harness.fire("agent_settled");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("starts timing at the request hook even when assistant message_start arrives first", async () => {
+    await harness.fire("turn_start");
+    await harness.fire("message_start", { message: { role: "assistant" } });
+    vi.advanceTimersByTime(30_000);
+    expect(vi.getTimerCount()).toBe(0);
+    await harness.fire("provider_stream_event", { data: {} });
+    await harness.fire("before_provider_request");
+    vi.advanceTimersByTime(100);
+    await output(10, 100);
     await end();
     expectTps("50.0");
+  });
+
+  it("keeps first-event TTFT after abort before content", async () => {
+    const controller = new AbortController();
+    Object.assign(harness.ctx, { signal: controller.signal });
+    await request();
+    vi.advanceTimersByTime(700);
+    await harness.fire("provider_stream_event", { data: { type: "response.created" } });
+    vi.advanceTimersByTime(10_000);
+    controller.abort();
+    vi.advanceTimersByTime(30_000);
+    const handler = harness.command("tps").handler;
+    if (typeof handler !== "function") throw new Error("Missing TPS handler");
+    await handler("status", harness.ctx);
+    expect(harness.notify.mock.calls.at(-1)?.[0]).toContain("TTFT 700ms");
+    expect(harness.setStatus).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

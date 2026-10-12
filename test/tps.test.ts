@@ -72,10 +72,10 @@ describe("TPS status", () => {
     await runCommand(harness, "bar on");
     expect(harness.setStatus).toHaveBeenLastCalledWith(
       "tps",
-      "\u001b[38;2;255;0;0m10.0 tok/s\u001b[39m",
+      "\u001b[38;2;255;0;0m5.0 tok/s\u001b[39m",
     );
     expect(harness.setWorkingMessage).toHaveBeenLastCalledWith(
-      "<muted> · 10.0 tok/s · TTFT 100ms</muted>",
+      "<muted> · 5.0 tok/s</muted>",
     );
 
     await stream(harness, "", "text_delta");
@@ -102,10 +102,10 @@ describe("TPS status", () => {
     await harness.fire("message_end", {
       message: { role: "assistant", usage: { output: 8 } },
     });
-    expect(harness.setStatus.mock.calls.at(-1)?.[1]).toContain("40.0 tok/s");
+    expect(harness.setStatus.mock.calls.at(-1)?.[1]).toContain("26.7 tok/s");
     expect(harness.eventEmit).toHaveBeenCalledWith("zentui:extension-status-color", {
       key: "tps",
-      color: "#1aaa13",
+      color: "#ffee00",
     });
 
     await harness.fire("turn_start");
@@ -140,6 +140,8 @@ describe("TPS status", () => {
 
     await runCommand(harness, "help");
     expect(harness.notify.mock.calls.at(-1)?.[0]).toContain("TPS/TTFT commands:");
+    expect(harness.notify.mock.calls.at(-1)?.[0]).toContain("request-average output throughput, not decoding speed");
+    expect(harness.notify.mock.calls.at(-1)?.[0]).toContain("first parsed server event, not necessarily a generated token");
     await runCommand(harness, "");
     expect(harness.notify).toHaveBeenLastCalledWith(
       "No TPS/TTFT measurement yet · bar on · line on",
@@ -181,7 +183,30 @@ describe("TPS status", () => {
     await harness.fire("session_shutdown");
   });
 
-  it("uses plain tok/s in Zentui working-line segments", async () => {
+  it("preserves ttft controls while toggling first-server-event latency", async () => {
+    const harness = createHarness();
+    tpsStatus(harness.pi);
+    await harness.fire("turn_start");
+    await harness.fire("before_provider_request");
+    vi.advanceTimersByTime(100);
+    await harness.fire("provider_stream_event", { data: { type: "response.created" } });
+    await stream(harness, "abcd");
+    vi.advanceTimersByTime(100);
+    await runCommand(harness, "ttft off");
+    expect(harness.setWorkingMessage.mock.calls.at(-1)?.[0]).toBe("<muted> · 5.0 tok/s</muted>");
+    await runCommand(harness, "ttft toggle");
+    expect(harness.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 100ms");
+    await runCommand(harness, "off");
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(800);
+    await runCommand(harness, "on");
+    await harness.fire("message_end", { message: { role: "assistant", usage: { output: 10 } } });
+    expect(harness.setStatus.mock.calls.at(-1)?.[1]).toContain("10.0 tok/s");
+    expect(harness.setStatus.mock.calls.at(-1)?.[1]).not.toContain("est.");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("uses plain request-average tok/s in Zentui working-line segments", async () => {
     writeSettings(agentDir, {
       "pi-tps-status": {
         enabled: true,
@@ -207,7 +232,7 @@ describe("TPS status", () => {
     expect(harness.setStatus).not.toHaveBeenCalledWith("tps", expect.any(String));
     expect(harness.eventEmit).toHaveBeenCalledWith("zentui:working-line-segment", {
       key: "tps",
-      text: "1000 tok/s",
+      text: "500 tok/s",
     });
 
     await harness.fire("agent_settled");
@@ -225,6 +250,7 @@ describe("TPS status", () => {
     await harness.fire("turn_start");
     await harness.fire("before_provider_request");
     vi.advanceTimersByTime(2_000);
+    await harness.fire("provider_stream_event", { data: { type: "response.created" } });
     await stream(harness, "abcdefgh");
     expect(harness.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 2.00s");
 
@@ -232,18 +258,19 @@ describe("TPS status", () => {
     expect(harness.setWorkingMessage).toHaveBeenLastCalledWith(undefined);
   });
 
-  it("formats long TTFT values and high throughput", async () => {
+  it("formats long first-server-event TTFT values and high throughput", async () => {
     const harness = createHarness();
     tpsStatus(harness.pi);
     await harness.fire("before_agent_start");
     await harness.fire("turn_start");
     await harness.fire("before_provider_request");
     vi.advanceTimersByTime(10_001);
+    await harness.fire("provider_stream_event", { data: { type: "response.created" } });
     await stream(harness, "x".repeat(8_000));
     vi.advanceTimersByTime(10_000);
 
     expect(harness.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 10.0s");
-    expect(harness.setStatus.mock.calls.at(-1)?.[1]).toContain("200 tok/s");
+    expect(harness.setStatus.mock.calls.at(-1)?.[1]).toContain("100 tok/s");
     await harness.fire("agent_settled");
   });
 
@@ -310,6 +337,7 @@ describe("TPS status", () => {
     await harness.fire("before_provider_request");
     vi.advanceTimersByTime(1_000);
     expect(harness.setWorkingMessage).not.toHaveBeenCalled();
+    await stream(harness, "x".repeat(400));
 
     await runCommand(harness, "on");
     await runCommand(harness, "on");
@@ -330,6 +358,7 @@ describe("TPS status", () => {
     await harness.fire("before_agent_start");
     await harness.fire("turn_start");
     await harness.fire("before_provider_request");
+    await stream(harness, "x".repeat(400));
     vi.advanceTimersByTime(1_999);
     const before = harness.setWorkingMessage.mock.calls.length;
     vi.advanceTimersByTime(1);
@@ -342,8 +371,11 @@ describe("TPS status", () => {
     await rounded.fire("before_agent_start");
     await rounded.fire("turn_start");
     await rounded.fire("before_provider_request");
-    vi.advanceTimersByTime(251);
-    expect(rounded.setWorkingMessage.mock.calls.length).toBeGreaterThan(1);
+    await stream(rounded, "x".repeat(400));
+    vi.advanceTimersByTime(250);
+    const beforeRoundedRefresh = rounded.setWorkingMessage.mock.calls.length;
+    vi.advanceTimersByTime(1);
+    expect(rounded.setWorkingMessage.mock.calls.length).toBeGreaterThan(beforeRoundedRefresh);
     await rounded.fire("session_shutdown");
   });
 
@@ -385,8 +417,8 @@ describe("TPS status", () => {
     await directCommit.fire("message_end", {
       message: { role: "assistant", usage: { output: 5 } },
     });
-    // Final usage alone cannot supply a first-output timestamp.
-    expect(directCommit.setStatus).not.toHaveBeenCalled();
+    // Final-only usage has a timed request but no observed content timestamp.
+    expect(directCommit.setStatus.mock.calls.at(-1)?.[1]).toContain("50.0 tok/s");
     await directCommit.fire("agent_settled");
   });
 
@@ -398,7 +430,7 @@ describe("TPS status", () => {
     await malformed.fire("before_agent_start");
     await malformed.fire("turn_start");
     await malformed.fire("before_provider_request");
-    expect(malformed.setWorkingMessage.mock.calls.at(-1)?.[0]).toContain("TTFT 0ms…");
+    expect(malformed.setWorkingMessage).not.toHaveBeenCalled();
     await malformed.fire("session_shutdown");
 
     writeFileSync(join(agentDir, "settings.json"), "[]");
