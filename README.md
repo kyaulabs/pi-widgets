@@ -7,7 +7,7 @@
 Status widgets for [Pi](https://github.com/earendil-works/pi-mono). The package contains two independent extensions:
 
 - `fast-mode.ts` toggles OpenAI's Fast, Ultrafast, and Flex service tiers and shows the active mode.
-- `tps.ts` reports token throughput and time to first token (TTFT) in Pi's footer and working line.
+- `tps.ts` reports request-average output throughput and first-server-event latency (displayed as TTFT) in Pi's footer and working line.
 
 ## Requirements
 
@@ -146,73 +146,92 @@ The default is `ctrl+alt+m`. The extension ignores `ctrl+m`, `enter`, and `retur
 
 ## TPS and TTFT status
 
-The TPS widget measures **observed generation speed**: how fast the AI produces output once
-it starts. For each response, TPS timing starts at the first nonempty text, thinking, or
-tool-call argument delta and stops at the assistant's `message_end`. The initial wait is
-shown separately as TTFT, not included in TPS.
+The TPS widget measures **request-average output throughput**, not pure decoding speed.
+For each response, timing starts at `before_provider_request` and stops at the assistant's
+`message_end`. The denominator includes the wait before content, hidden reasoning, streaming,
+and response finalization, excluding the observable pauses listed below.
 
-For example, 10 seconds processing a large file followed by 100 output tokens generated in
-2 seconds produces **50.0 tok/s**, with **TTFT 10.0s**. Reading the file itself counts toward neither.
+Previously, the widget divided the final output count by time after the first content delta.
+Pi's OpenAI Responses providers, including `openai-codex`, copy `output_tokens` to `usage.output`
+and its reasoning breakdown to `usage.reasoning`. Output already includes hidden reasoning.
+Counting that reasoning over only the later content burst inflated TPS.
 
-The footer shows tokens per second after output begins and freezes between requests. The
-working-line suffix is removed while the meter is paused, leaving Pi's normal tool, compaction,
-and retry indicators alone. During a request it shows TPS and TTFT:
+For example, a 10-second request wait followed by 100 output tokens in 2 seconds now produces
+**8.3 tok/s**. TTFT is measured independently from the first server event, not from that content
+burst. A local file read before the request counts toward neither.
 
-```text
-32.4 tok/s · TTFT 684ms
-```
-
-The metric uses this calculation:
+The calculation is:
 
 ```text
-output tokens from measurable responses / their accumulated generation seconds
+sum of output tokens from measurable responses / sum of their matching timed request seconds
 ```
 
-The initial wait is excluded **on every response**, including the request after a large file
-read. The footer keeps a generation-time-weighted aggregate across the prompt's responses,
-finalized at `agent_settled`, rather than averaging individual rates.
+Each response includes its own initial wait. The footer aggregates across the prompt's
+responses until `agent_settled`; it never averages individual rates. It freezes between
+requests. The working-line suffix is removed during pauses, leaving Pi's tool, compaction,
+and retry indicators alone. A finalized measurement might look like:
 
-Live output is estimated internally at one token per four Unicode code points.
-Partial provider usage is not trusted as a current total: it can remain stale while more text
-arrives. At completion, a positive provider-reported output count replaces that response's
-estimate. Missing, invalid, or zero-placeholder usage retains the estimate.
-The UI always uses plain `tok/s` and `TTFT`, without estimate labels or approximation symbols;
-this display choice does not make live or fallback token counts exact.
+```text
+32.4 tok/s · TTFT 700ms
+```
 
-Text, thinking, and tool-call argument generation count as assistant output; input/cache tokens,
-tool results, nested tool-model usage, and compaction/branch-summary usage do not. Reasoning
-usage is already included in provider output totals and is never added a second time.
+The UI labels **first-server-event latency** as `TTFT`. It runs from `before_provider_request`
+to the first parsed `provider_stream_event`, using the same pause-adjusted request clock, and
+resets for each response. This is not necessarily time to a generated token, visible prose, or
+the first network byte: `response.created` can establish this measurement without any content.
+Text, thinking, and tool-call deltas do not establish TTFT; first-content latency is not displayed.
 
-Responses without an observed content delta, or with less than 50 ms of observed generation,
-are excluded from both the numerator and denominator. This avoids inventing a rate from a
-final-only usage report or folding untimed tokens into later responses.
+TTFT is hidden until a raw event is observed, or when the Pi host/provider lacks the necessary
+hooks. It never uses a fabricated zero or substitutes content arrival for a missing raw event.
+Buffered/nonstreaming responses with a request hook and positive output usage can contribute
+throughput while TTFT remains hidden. Without a request hook, neither request
+throughput nor latency is inferred from `message_start`. `/tps ttft` and `showTTFT` control this
+single latency value.
 
-Both TPS and TTFT exclude:
+Live counts use one estimated token per four Unicode code points in text, thinking, and tool-call
+argument deltas, rounded up per response. They use the full timed request, not a post-content
+window. Partial usage can be stale and is ignored. A positive final `usage.output` replaces
+that response's estimate. Missing, invalid, or zero-placeholder usage retains the estimate.
+The display always uses plain `tok/s`, without average or estimate prefixes; live counts and
+aggregates containing fallback counts are still estimates. Hidden reasoning is unobservable in
+these estimates, so final usage can change the rate substantially. While waiting without
+content, the previous aggregate remains unchanged.
 
-- All tool execution, including parallel/custom tools, permission gates, and result hooks.
+The widget uses each provider's declared output total without adding or subtracting
+`usage.reasoning`. Reasoning metadata can be missing or zero, and subtracting it is not a
+provider-independent count of streamed content. Input/cache tokens, tool results, nested
+model calls during tools, and compaction/branch-summary usage do not contribute.
+Responses without a matching request window, with less than 50 ms of timed request duration,
+or without positive usage or an observed output estimate contribute neither tokens nor time.
+
+Throughput and latency exclude:
+
+- Tool execution, including parallel/custom tools, permission gates, and result hooks.
 - Manual, automatic, failed, and cancelled compactions, plus branch summarization.
-- Prompt/context preparation and credential resolution before the provider-request hook.
-- Blocking extension UI prompts and gaps between model requests.
-- Pi's automatic retry backoff, queued-continuation preparation, and idle time.
+- Prompt/context preparation and authentication before the provider-request hook.
+- Blocking extension UI prompts and gaps between requests.
+- Observable retry backoff, queued-continuation preparation, and idle time.
 
-TTFT runs from `before_provider_request` to the first content delta, excluding observable
-pauses. It resets for each response, so it reflects the current request's initial wait.
-Usage-only events never invent a first-token timestamp. An aborted response without output
-does not leave a TTFT counter running. Cancellation stops timing immediately and retains
-only a measurable estimate of output observed before cancellation.
+Retries within an open response retain the observed attempt time before a non-success HTTP
+response. Timing pauses at that response and resumes at a repeated request hook, excluding
+backoff. Final usage replaces the response's estimate once, not once per attempt. Latencies
+are measured from the initial hook over these accumulated attempt intervals. If success headers,
+a raw stream event, or content arrive without a new request hook, retry latency cannot be
+separated from backoff: that response's timing becomes unknown and its throughput sample is
+excluded. Previous aggregates remain intact. Pi-level retries after a response closes start a
+new response window; the gap is excluded.
 
-Observable non-success HTTP responses pause timing until the next request hook or successful
-response/stream start. If a provider retries without another request hook, retry pre-response
-latency cannot be separated from backoff and is excluded from TTFT too. Custom providers
-without a payload hook can still yield generation TPS, but TTFT is omitted as unavailable.
+Cancellation stops the timer immediately and retains only a measurable estimate of content
+observed before cancellation. Late events cannot add finalized usage to that closed window.
+An interrupted response retains an observed first-server-event TTFT; without that event,
+TTFT remains hidden.
 
-**Accuracy limits:** this is a client-observed rate, not exact server-side decoding speed.
-Pi streams chunks, not individually timestamped tokens. The formula uses the whole response's
-output count, including its first chunk, over the observed first-delta-to-completion interval.
-Network buffering, hidden reasoning before the first delta, and response-finalization latency
-can skew the result, particularly for short responses. Hidden provider-internal retries or
-reconnects after output starts cannot reliably be separated from generation. Delays before
-output starts never lower TPS.
+**Accuracy limits:** these are client-observed measurements. Chunking, buffering, network delay,
+and finalization affect them; hidden provider-internal retries/reconnects without observable
+boundaries remain inside the timed request. Older Pi hosts and custom providers may lack hooks.
+Historical total response durations are not TTFT measurements. This reporting fix does not
+eliminate provider latency, establish the cause of reported long stalls, or change transport,
+authentication, reasoning effort, or service tier.
 
 ### Commands
 
@@ -224,7 +243,7 @@ output starts never lower TPS.
 | `/tps toggle` | Toggle all TPS metrics. |
 | `/tps bar on\|off\|toggle` | Control the footer value. |
 | `/tps line on\|off\|toggle` | Control the working-line suffix. |
-| `/tps ttft on\|off\|toggle` | Control TTFT in the working line. |
+| `/tps ttft on\|off\|toggle` | Control first-server-event TTFT in the working line. |
 | `/tps help` | Show command help. |
 
 Command changes last for the current session.
@@ -247,10 +266,10 @@ Set defaults under `pi-tps-status` in `~/.pi/agent/settings.json`:
 
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `enabled` | boolean | `true` | Enable TPS and TTFT measurement output. |
+| `enabled` | boolean | `true` | Enable throughput and latency measurement output. |
 | `statusBar` | boolean | `true` | Show TPS in Pi's footer. |
 | `workingLine` | boolean | `true` | Show live metrics beside Pi's working indicator. |
-| `showTTFT` | boolean | `true` | Include TTFT in the working line. |
+| `showTTFT` | boolean | `true` | Include first-server-event TTFT in the working line. |
 | `refreshMs` | number | `250` | Refresh interval, rounded and clamped to 100–2000 ms. |
 
 Invalid values use their defaults. Missing or malformed settings files do not stop the extension from loading.
@@ -267,7 +286,7 @@ The footer color moves through these throughput ranges:
 
 Standard Pi output uses 24-bit ANSI color.
 
-When [pi-zentui](https://github.com/lmilojevicc/pi-zentui) advertises working-line segment support, the widget sends TPS and TTFT as a named `tps` segment instead of replacing Pi's working message. It also emits the matching status color before each footer update. Without Zentui, it uses Pi's standard status and working-message APIs.
+When [pi-zentui](https://github.com/lmilojevicc/pi-zentui) advertises working-line segment support, the widget sends throughput and latency as a named `tps` segment instead of replacing Pi's working message. It also emits the matching status color before each footer update. Without Zentui, it uses Pi's standard status and working-message APIs.
 
 ## Data handling
 
