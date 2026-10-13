@@ -30,10 +30,15 @@ const HELP_TEXT = [
   "  /tps on|off|toggle           Control all TPS metrics",
   "  /tps bar on|off|toggle       Control the footer status",
   "  /tps line on|off|toggle      Control the Zentui working-line suffix",
-  "  /tps ttft on|off|toggle      Show or hide TTFT on the Working line",
+  "  /tps ttft on|off|toggle      Show or hide first-server-event latency",
   "  /tps help                    Show this help",
   "",
-  "tok/s measures generation after first output; TTFT is this response's initial wait.",
+  "tok/s is request-average output throughput, not decoding speed.",
+  "Live/fallback counts estimate streamed content over the full timed request; labels stay plain tok/s.",
+  "TTFT here means time to the first parsed server event, not necessarily a generated token.",
+  "A response.created event can establish TTFT without any text, thinking, or tool-call content.",
+  "Unavailable TTFT is hidden. Retries include observed attempt time, excluding observable backoff.",
+  "Retries without a repeated request hook have unavailable timing and are excluded from throughput.",
   "Command changes last for the current session. Persistent defaults are under",
   `"${CONFIG_FIELD}" in ~/.pi/agent/settings.json.`,
 ].join("\n");
@@ -50,10 +55,10 @@ type RuntimeConfig = {
 type Measurement = {
   llmMs: number;
   runningSince?: number;
-  firstTokenMs?: number;
-  ttftKnown: boolean;
+  firstEventMs?: number;
+  requestTimed: boolean;
   completedOutputTokens: number;
-  completedGenerationMs: number;
+  completedRequestMs: number;
   currentGeneratedCodePoints: number;
   responseOpen: boolean;
   active: boolean;
@@ -142,32 +147,22 @@ function elapsedLlmMs(measurement: Measurement, now: number): number {
     ? 0 : Math.max(0, now - measurement.runningSince));
 }
 
-function currentGenerationMs(measurement: Measurement, now: number): number {
-  if (measurement.firstTokenMs === undefined) return 0;
-  return elapsedLlmMs(measurement, now) - measurement.firstTokenMs;
-}
-
 function hasCurrentSample(measurement: Measurement, now: number): boolean {
-  return measurement.responseOpen && currentGenerationMs(measurement, now) >= 50;
+  return measurement.responseOpen && measurement.requestTimed &&
+    elapsedLlmMs(measurement, now) >= 50;
 }
 
 function calculateTps(measurement: Measurement, now: number): number | undefined {
-  const includeCurrent = hasCurrentSample(measurement, now);
+  // A live zero estimate is not a completed zero-output sample. Do not dilute
+  // previous totals while hidden output is still unobservable.
+  const includeCurrent = hasCurrentSample(measurement, now) &&
+    measurement.currentGeneratedCodePoints > 0;
   const tokens = measurement.completedOutputTokens +
     (includeCurrent ? estimatedCurrentOutputTokens(measurement) : 0);
-  const durationMs = measurement.completedGenerationMs +
-    (includeCurrent ? currentGenerationMs(measurement, now) : 0);
+  const durationMs = measurement.completedRequestMs +
+    (includeCurrent ? elapsedLlmMs(measurement, now) : 0);
   if (tokens <= 0 || !Number.isFinite(durationMs) || durationMs < 50) return undefined;
   return tokens / (durationMs / 1_000);
-}
-
-function calculateTtft(measurement: Measurement, now: number): { value: number; pending: boolean } | undefined {
-  if (!measurement.ttftKnown ||
-    (measurement.firstTokenMs === undefined && !measurement.responseOpen)) return undefined;
-  return {
-    value: measurement.firstTokenMs ?? elapsedLlmMs(measurement, now),
-    pending: measurement.firstTokenMs === undefined,
-  };
 }
 
 function formatTps(value: number): string {
@@ -190,9 +185,8 @@ function formatWorkingLineMeasurement(
   const parts: string[] = [];
   const status = formatStatusMeasurement(measurement, now);
   if (status) parts.push(status);
-  if (config.showTTFT) {
-    const ttft = calculateTtft(measurement, now);
-    if (ttft) parts.push(`TTFT ${formatDuration(ttft.value)}${ttft.pending ? "…" : ""}`);
+  if (config.showTTFT && measurement.firstEventMs !== undefined) {
+    parts.push(`TTFT ${formatDuration(measurement.firstEventMs)}`);
   }
   return parts.join(" · ");
 }
@@ -295,9 +289,9 @@ export default function tpsStatus(pi: ExtensionAPI): void {
   function newMeasurement(): Measurement {
     return {
       llmMs: 0,
-      ttftKnown: false,
+      requestTimed: false,
       completedOutputTokens: 0,
-      completedGenerationMs: 0,
+      completedRequestMs: 0,
       currentGeneratedCodePoints: 0,
       responseOpen: false,
       active: false,
@@ -424,46 +418,67 @@ export default function tpsStatus(pi: ExtensionAPI): void {
   }
 
   function resumeClock(ctx: ExtensionContext): void {
-    if (!measurement.responseOpen || waitingForUi || waitingForRetry) return;
+    if (!measurement.responseOpen || !measurement.requestTimed || waitingForUi || waitingForRetry) return;
     measurement.runningSince ??= monotonicNow();
     if (config.enabled) startTimer(ctx);
     render(ctx, monotonicNow(), true);
   }
 
-  function startResponse(ctx: ExtensionContext, ttftKnown = false): void {
+  function startResponse(ctx: ExtensionContext, requestHook = false): void {
     // A turn arms the meter; only a provider request starts the clock. Context hooks,
     // authentication and compaction can all run after turn_start but before this point.
     const signal = ctx.signal;
     if (!turnOpen || compacting || signal?.aborted) return;
     if (!measurement.responseOpen) {
       measurement.llmMs = 0;
-      measurement.firstTokenMs = undefined;
-      measurement.ttftKnown = ttftKnown;
+      measurement.firstEventMs = undefined;
+      measurement.requestTimed = false;
       if (signal) {
         const onAbort = () => closeTurn(ctx);
         signal.addEventListener("abort", onAbort, { once: true });
         detachAbort = () => signal.removeEventListener("abort", onAbort);
       }
     }
+    // message_start may precede the payload hook. Arm it without fabricating a
+    // request start, then upgrade when the actual hook arrives.
+    if (requestHook && !measurement.requestTimed) {
+      measurement.llmMs = 0;
+      measurement.firstEventMs = undefined;
+      measurement.currentGeneratedCodePoints = 0;
+      measurement.requestTimed = true;
+    }
     measurement.responseOpen = true;
-    waitingForRetry = false;
+    if (requestHook) waitingForRetry = false;
     resumeClock(ctx);
   }
 
+  function invalidateRequestTiming(): void {
+    // A retry resumed without its request hook: latency and backoff cannot be
+    // separated. Never use the shortened clock as a throughput denominator.
+    measurement.requestTimed = false;
+    measurement.firstEventMs = undefined;
+    waitingForRetry = false;
+  }
+
   function acceptStreamUpdate(assistantEvent: unknown, ctx: ExtensionContext): void {
-    if (!measurement.active || !measurement.responseOpen) return;
+    if (!measurement.active || !measurement.responseOpen || !measurement.requestTimed ||
+      compacting) return;
     const now = monotonicNow();
     const delta = streamedDelta(assistantEvent);
-    const isFirstToken = delta !== undefined && measurement.firstTokenMs === undefined;
+    if (waitingForRetry && delta !== undefined) {
+      invalidateRequestTiming();
+      render(ctx, now, true);
+      return;
+    }
+    const isFirstContent = delta !== undefined && measurement.currentGeneratedCodePoints === 0;
     if (delta !== undefined) {
-      if (isFirstToken) measurement.firstTokenMs = elapsedLlmMs(measurement, now);
       measurement.currentGeneratedCodePoints += countCodePoints(delta);
     }
 
-    // Partial usage can be a stale snapshot, or include unstreamed reasoning.
-    // Only a real content delta establishes first-output timing; usage is finalized
-    // at message_end. Live token counts use the code-point estimate.
-    render(ctx, now, isFirstToken);
+    // Partial usage can be stale or include unstreamed reasoning. Live counts
+    // estimate real content deltas; only a raw provider event establishes TTFT.
+    // Usage is finalized at message_end.
+    render(ctx, now, isFirstContent);
   }
 
   function commitResponse(message: unknown, ctx: ExtensionContext): void {
@@ -473,12 +488,12 @@ export default function tpsStatus(pi: ExtensionAPI): void {
     // Zero usage on an interrupted stream is often a provider placeholder.
     const hasExactOutput = exactOutput !== undefined && exactOutput > 0;
     const responseTokens = hasExactOutput ? exactOutput : estimatedCurrentOutputTokens(measurement);
-    if (hasCurrentSample(measurement, now) && responseTokens > 0) {
+    if (!waitingForRetry && hasCurrentSample(measurement, now) && responseTokens > 0) {
       measurement.completedOutputTokens += responseTokens;
-      measurement.completedGenerationMs += currentGenerationMs(measurement, now);
+      measurement.completedRequestMs += elapsedLlmMs(measurement, now);
     }
-    // Untimed/buffered responses must not add tokens without matching generation
-    // time. Keep the previous aggregate rather than inventing a duration.
+    // Buffered responses are measurable with a request hook, even without a
+    // content timestamp. Never pair usage with a fabricated message-start clock.
     measurement.currentGeneratedCodePoints = 0;
     measurement.responseOpen = false;
     waitingForRetry = false;
@@ -514,7 +529,7 @@ export default function tpsStatus(pi: ExtensionAPI): void {
   }
 
   pi.registerCommand("tps", {
-    description: "Show or configure TPS/TTFT metrics (on, off, bar, line, ttft)",
+    description: "Request-average output throughput and first-server-event TTFT (on, off, bar, line, ttft)",
     getArgumentCompletions: (prefix) => {
       const values = ["on", "off", "toggle", "status", "help", "bar on", "bar off", "bar toggle", "line on", "line off", "line toggle", "ttft on", "ttft off", "ttft toggle"];
       const matches = values.filter((value) => value.startsWith(prefix.toLowerCase()));
@@ -598,15 +613,37 @@ export default function tpsStatus(pi: ExtensionAPI): void {
   pi.on("before_provider_request", (_event, ctx) => startResponse(ctx, true));
 
   pi.on("message_start", (event, ctx) => {
-    // Conservative fallback for custom providers without a payload hook. Never start
-    // at turn_start: that would meter local preparation and compaction as LLM time.
+    // Without the request hook, only arm the response; timing remains unknown.
+    // message_start can precede local preparation, so it is not a request clock.
     if (event.message.role === "assistant") startResponse(ctx);
+  });
+
+  // This notification is available on newer Pi hosts; older hosts simply never
+  // emit it. Keep the existing peer/config compatibility and do not infer it
+  // from HTTP headers or normalized content events.
+  const onStreamEvent = pi.on as unknown as (
+    event: "provider_stream_event",
+    handler: (event: unknown, ctx: ExtensionContext) => void,
+  ) => void;
+  onStreamEvent("provider_stream_event", (_event, ctx) => {
+    if (!measurement.responseOpen || !measurement.requestTimed || compacting) return;
+    if (waitingForRetry) {
+      invalidateRequestTiming();
+      render(ctx, monotonicNow(), true);
+      return;
+    }
+    if (measurement.firstEventMs === undefined) {
+      measurement.firstEventMs = elapsedLlmMs(measurement, monotonicNow());
+      render(ctx, monotonicNow(), true);
+    }
   });
 
   pi.on("after_provider_response", (event, ctx) => {
     if (!measurement.responseOpen) return;
-    waitingForRetry = event.status < 200 || event.status >= 300;
-    if (waitingForRetry) pauseClock(ctx);
+    const failed = event.status < 200 || event.status >= 300;
+    if (!failed && waitingForRetry) invalidateRequestTiming();
+    waitingForRetry = failed;
+    if (failed) pauseClock(ctx);
     else resumeClock(ctx);
   });
 
