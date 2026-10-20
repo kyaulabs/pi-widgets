@@ -6,7 +6,7 @@
 
 Status widgets for [Pi](https://github.com/earendil-works/pi-mono). The package contains two independent extensions:
 
-- `fast-mode.ts` toggles OpenAI's Fast, Ultrafast, and Flex service tiers and shows the active mode.
+- `fast-mode.ts` requests OpenAI's Fast, Ultrafast, and Flex service tiers and shows the tier reported by the server.
 - `tps.ts` reports request-average output throughput and first-server-event latency (displayed as TTFT) in Pi's footer and working line.
 
 ## Requirements
@@ -61,7 +61,7 @@ loading duplicate widgets. Commands, settings keys, and shortcuts are unchanged.
 
 ## GPT Fast mode
 
-Fast mode is disabled by default. Run `/fast` or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd> to toggle it for the current session. The ` Fast` footer status appears while it is enabled.
+Fast mode is disabled by default. Run `/fast` or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd> to toggle it for the current session. The footer initially shows ` Fast (requested)`.
 
 When the selected model is supported, the extension sends the API-compatible
 `priority` value for Fast mode in the matching provider request:
@@ -72,13 +72,17 @@ When the selected model is supported, the extension sends the API-compatible
 }
 ```
 
-Run `/ultrafast` to request `service_tier: "ultrafast"` for `gpt-6-astra` or
-`gpt-5.6-sol` on either provider. The footer shows `⚡ Ultrafast` in purple.
-GPT-5.6 Sol requires OpenAI preview access. Both tiers cost more than Standard;
+Run `/ultrafast` to request `service_tier: "ultrafast"` for `gpt-6-astra`,
+`gpt-6.1-sol`, or `gpt-5.6-sol` on either provider. The footer shows `⚡ Ultrafast`
+in purple, initially with `(requested)`. OpenAI documents general API availability
+for GPT-6 Astra and [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol);
+the retained GPT-5.6 Sol support requires preview access. Both tiers cost more than Standard;
 see OpenAI's [Fast](https://developers.openai.com/api/docs/guides/fast-mode) and
 [Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode) guides
 for pricing and availability restrictions. Provider authentication and account
-access still determine whether a request is accepted.
+access still determine whether a request is accepted. Pi's `openai-codex` provider
+uses ChatGPT OAuth, a separate service from the public OpenAI API. Public API
+availability does not guarantee the same tier access through ChatGPT OAuth.
 
 Run `/flex` to request `service_tier: "flex"`, with a green `󰿗 Flex` footer status.
 Flex offers lower costs in exchange for slower responses and occasional resource
@@ -96,6 +100,26 @@ All three modes are mutually exclusive: enabling one replaces the other. Running
 active mode's command again disables it. The existing shortcut toggles Fast only.
 Unsupported models and mismatched payloads are left unchanged, with a warning
 when the selected mode does not support the current model.
+
+The footer keeps `(requested)` until `response.completed` reports a `service_tier`.
+A matching tier removes that suffix. If the server reports a different tier, the
+footer shows, for example, `Fast → default`, and the extension warns. Missing tier
+metadata leaves the request unverified with `(requested)`. Unsupported models show
+`Fast (unsupported)`, `Ultrafast (unsupported)`, or `Flex (unsupported)`.
+Run `/fast status` to see the selected model, requested tier, and last reported tier
+without toggling the mode. Requesting a tier alone does not establish a speed increase.
+
+Reasoning effort is a separate native Pi setting. In Pi 1.3 or newer, use
+`/thinking max` for the current session, or start with `pi --thinking max`.
+`/thinking` lists the levels supported by the selected model. The GPT-6 family
+(`gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol`, and `gpt-6-luna`) supports `max`.
+This is the highest public API reasoning effort. Codex and ChatGPT also offer
+[Ultra](https://learn.chatgpt.com/docs/agent-configuration/subagents), which combines
+maximum reasoning with proactive parallel subagents. Pi does not expose that
+orchestration preset; sending `reasoning.effort: "ultra"` is not its equivalent.
+Ultrafast is an independent speed setting and works with `max` reasoning.
+Available levels depend on the model, and changing service tiers does not change
+reasoning effort.
 
 ### Supported models
 
@@ -292,7 +316,7 @@ When [pi-zentui](https://github.com/lmilojevicc/pi-zentui) advertises working-li
 
 Both extensions run inside the Pi process with the permissions granted to Pi.
 
-The Fast mode extension reads `settings.json` and `keybindings.json`. It changes only matching provider payloads while Fast mode is enabled. The TPS extension reads `settings.json` and observes lifecycle, message-usage, and tool-execution events. It does not write settings, session data, prompts, responses, or metrics to disk, and it does not send telemetry.
+The Fast mode extension reads `settings.json` and `keybindings.json`. It changes only matching provider payloads while a service-tier mode is enabled. The TPS extension reads `settings.json` and observes lifecycle, message-usage, and tool-execution events. It does not write settings, session data, prompts, responses, or metrics to disk, and it does not send telemetry.
 
 ## Development
 
