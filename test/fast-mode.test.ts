@@ -45,7 +45,7 @@ describe("GPT Fast mode status", () => {
     await handler(harness.command("fast").handler)("", harness.ctx);
     expect(harness.setStatus).toHaveBeenLastCalledWith(
       "gpt-fast-mode",
-      "<warning> Fast</warning>",
+      "<warning> Fast (requested)</warning>",
     );
     expect(harness.notify).toHaveBeenLastCalledWith(
       "GPT Fast mode enabled (service_tier: priority).",
@@ -71,6 +71,28 @@ describe("GPT Fast mode status", () => {
 
     await harness.fire("session_shutdown");
     expect(harness.setStatus).toHaveBeenLastCalledWith("gpt-fast-mode", undefined);
+  });
+
+  it("reports the server tier rather than assuming a requested speed was granted", async () => {
+    const harness = createHarness({ model: { provider: "openai-codex", id: "gpt-6.1-sol" } });
+    gptFastModeStatus(harness.pi);
+    await handler(harness.command("fast").handler)("", harness.ctx);
+    await harness.fire("before_provider_request", { payload: { model: "gpt-6.1-sol" } });
+    await harness.fire("provider_stream_event", {
+      provider: "openai-codex", model: "gpt-6.1-sol",
+      data: { type: "response.completed", response: { service_tier: "default" } },
+    });
+    expect(harness.setStatus).toHaveBeenLastCalledWith(
+      "gpt-fast-mode", "<warning> Fast → default</warning>",
+    );
+    expect(harness.notify).toHaveBeenLastCalledWith(
+      "Requested GPT Fast (service_tier: priority), but the server reported default.", "warning",
+    );
+    await handler(harness.command("fast").handler)("status", harness.ctx);
+    expect(harness.notify).toHaveBeenLastCalledWith(
+      "Model: openai-codex/gpt-6.1-sol. Requested service_tier: priority. " +
+      "Last reported service_tier: default.",
+    );
   });
 
   it.each(["openai", "openai-codex"])("supports gpt-6-astra on %s", async (provider) => {
@@ -111,14 +133,14 @@ describe("GPT Fast mode status", () => {
   });
 
   it.each(["openai", "openai-codex"].flatMap((provider) =>
-    ["gpt-6-astra", "gpt-5.6-sol"].map((id) => ({ provider, id })),
+    ["gpt-6-astra", "gpt-6.1-sol", "gpt-5.6-sol"].map((id) => ({ provider, id })),
   ))("toggles Ultrafast for $provider/$id", async (model) => {
     const harness = createHarness({ model });
     gptFastModeStatus(harness.pi);
     const payload = { model: model.id, service_tier: "default", stream: true };
     await handler(harness.command("ultrafast").handler)("", harness.ctx);
     expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "\u001b[38;5;141m⚡\uFE0E Ultrafast\u001b[39m",
+      "gpt-fast-mode", "\u001b[38;5;141m⚡\uFE0E Ultrafast (requested)\u001b[39m",
     );
     expect(harness.notify).toHaveBeenLastCalledWith(
       "GPT Ultrafast mode enabled (service_tier: ultrafast).",
@@ -151,7 +173,7 @@ describe("GPT Fast mode status", () => {
     const payload = { model: model.id, service_tier: "default", stream: true };
     await handler(harness.command("flex").handler)("", harness.ctx);
     expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "<success>󰿗 Flex</success>",
+      "gpt-fast-mode", "<success>󰿗 Flex (requested)</success>",
     );
     expect(harness.notify).toHaveBeenLastCalledWith(
       "GPT Flex mode enabled (service_tier: flex).",
@@ -205,7 +227,7 @@ describe("GPT Fast mode status", () => {
     expect(harness.setStatus).toHaveBeenLastCalledWith("gpt-fast-mode", undefined);
     await harness.fire("session_start");
     expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "<warning> Fast</warning>",
+      "gpt-fast-mode", "<warning> Fast (requested)</warning>",
     );
     await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
       { ...payload, service_tier: "priority" },
@@ -228,7 +250,7 @@ describe("GPT Fast mode status", () => {
     ]);
     await handler(harness.shortcut("ctrl+alt+m").handler)(harness.ctx);
     expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "<warning> Fast</warning>",
+      "gpt-fast-mode", "<warning> Fast (requested)</warning>",
     );
     await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
       { ...payload, service_tier: "priority" },
@@ -248,7 +270,7 @@ describe("GPT Fast mode status", () => {
 
   it.each([
     { provider: "openai", id: "gpt-6-sol" },
-    { provider: "openai-codex", id: "gpt-6.1-sol" },
+    { provider: "openai-codex", id: "gpt-6-luna" },
     { provider: "anthropic", id: "gpt-6-astra" },
     undefined,
   ])("leaves unsupported Ultrafast requests unchanged for %j", async (model) => {
@@ -310,7 +332,7 @@ describe("GPT Fast mode status", () => {
     await harness.fire("session_start");
     expect(harness.setStatus).toHaveBeenLastCalledWith(
       "gpt-fast-mode",
-      "<warning> Fast</warning>",
+      "<warning> Fast (requested)</warning>",
     );
     await expect(
       harness.fire("before_provider_request", { payload: { model: "gpt-5.6" } }),
@@ -363,7 +385,7 @@ describe("GPT Fast mode status", () => {
     await harness.fire("session_start");
     expect(harness.setStatus).toHaveBeenLastCalledWith(
       "gpt-fast-mode",
-      "<warning> Fast</warning>",
+      "<warning> Fast (unsupported)</warning>",
     );
     expect([...harness.shortcuts.keys()]).toEqual(["alt+m"]);
     rmSync(xdg, { recursive: true, force: true });

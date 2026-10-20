@@ -32,7 +32,7 @@ const SUPPORTED_MODELS = new Set([
   "o3",
   "o4-mini",
 ]);
-const ULTRAFAST_MODELS = new Set(["gpt-6-astra", "gpt-5.6-sol"]);
+const ULTRAFAST_MODELS = new Set(["gpt-6-astra", "gpt-6.1-sol", "gpt-5.6-sol"]);
 // Flex has its own availability list; Fast support does not imply Flex support.
 const FLEX_MODELS = new Set([
   "gpt-6-astra",
@@ -60,15 +60,22 @@ const FLEX_MODELS = new Set([
 const CONFIG_FIELD = "pi-gpt-fast-mode";
 const DEFAULT_SHORTCUT = "ctrl+alt+m";
 const STATUS_KEY = "gpt-fast-mode";
-const STATUS_TEXT = " Fast";
-// Fixed purple; text presentation keeps the lightning glyph from becoming a yellow emoji.
-const ULTRAFAST_STATUS = "\u001b[38;5;141m⚡\uFE0E Ultrafast\u001b[39m";
+const STATUS_TEXT = { fast: " Fast", ultrafast: "⚡\uFE0E Ultrafast", flex: "󰿗 Flex" };
 const RESERVED_SHORTCUTS = new Set(["ctrl+m", "enter", "return"]);
 
 type SpeedMode = "fast" | "ultrafast" | "flex";
 const SERVICE_TIERS = { fast: "priority", ultrafast: "ultrafast", flex: "flex" } as const;
 type PiModel = { provider?: string; id?: string };
 type JsonObject = Record<string, unknown>;
+
+function modeLabel(mode: SpeedMode): string {
+  return mode === "ultrafast" ? "Ultrafast" : mode === "flex" ? "Flex" : "Fast";
+}
+
+function asObject(value: unknown): JsonObject | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonObject : undefined;
+}
 
 function modelKey(model: PiModel): string {
   return `${model.provider}/${model.id}`;
@@ -147,26 +154,38 @@ function loadShortcuts(): string[] {
 
 export default function gptFastModeStatus(pi: ExtensionAPI): void {
   let mode: SpeedMode | undefined = loadDefaultEnabled() ? "fast" : undefined;
+  let lastRequest: { model: string; mode: SpeedMode; tier?: string } | undefined;
+
+  function reportedTier(ctx: ExtensionContext): string | undefined {
+    return ctx.model && lastRequest?.model === modelKey(ctx.model) && lastRequest.mode === mode
+      ? lastRequest.tier : undefined;
+  }
 
   function updateStatus(ctx: ExtensionContext): void {
+    if (!mode) {
+      ctx.ui.setStatus(STATUS_KEY, undefined);
+      return;
+    }
+    const tier = reportedTier(ctx);
+    const suffix = !isSupportedModel(ctx.model, mode) ? " (unsupported)"
+      : !tier ? " (requested)"
+        : tier === SERVICE_TIERS[mode] || (mode === "fast" && tier === "fast")
+          ? "" : ` → ${tier}`;
+    const status = STATUS_TEXT[mode] + suffix;
     ctx.ui.setStatus(
       STATUS_KEY,
       mode === "ultrafast"
-        ? ULTRAFAST_STATUS
-        : mode === "fast"
-          ? ctx.ui.theme.fg("warning", STATUS_TEXT)
-          : mode === "flex"
-            ? ctx.ui.theme.fg("success", "󰿗 Flex")
-            : undefined,
+        // Fixed purple; text presentation keeps the lightning glyph from becoming a yellow emoji.
+        ? `\u001b[38;5;141m${status}\u001b[39m`
+        : ctx.ui.theme.fg(mode === "flex" ? "success" : "warning", status),
     );
   }
 
   function toggle(ctx: ExtensionContext, requested: SpeedMode): void {
     mode = mode === requested ? undefined : requested;
+    lastRequest = undefined;
     updateStatus(ctx);
-    const label = requested === "ultrafast"
-      ? "Ultrafast"
-      : requested === "flex" ? "Flex" : "Fast";
+    const label = modeLabel(requested);
     if (!mode) {
       ctx.ui.notify(`GPT ${label} mode disabled.`);
     } else if (isSupportedModel(ctx.model, mode)) {
@@ -178,8 +197,16 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
   }
 
   pi.registerCommand("fast", {
-    description: "Toggle GPT Fast mode (service_tier: priority)",
-    handler: async (_args, ctx) => toggle(ctx, "fast"),
+    description: "Toggle GPT Fast mode; /fast status shows requested and reported service tiers",
+    handler: async (args, ctx) => {
+      if (args.trim().toLowerCase() === "status") {
+        const model = ctx.model ? modelKey(ctx.model) : "unknown model";
+        ctx.ui.notify(`Model: ${model}. Requested service_tier: ${mode ? SERVICE_TIERS[mode] : "off"}. ` +
+          `Last reported service_tier: ${reportedTier(ctx) ?? "unconfirmed"}.`);
+        return;
+      }
+      toggle(ctx, "fast");
+    },
   });
   pi.registerCommand("ultrafast", {
     description: "Toggle GPT Ultrafast mode (service_tier: ultrafast)",
@@ -199,10 +226,17 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
 
   pi.on("session_start", (_event, ctx) => {
     mode = loadDefaultEnabled() ? "fast" : undefined;
+    lastRequest = undefined;
+    updateStatus(ctx);
+  });
+
+  pi.on("model_select", (_event, ctx) => {
+    lastRequest = undefined;
     updateStatus(ctx);
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
+    lastRequest = undefined;
     ctx.ui.setStatus(STATUS_KEY, undefined);
   });
 
@@ -211,9 +245,34 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
     if (!event.payload || typeof event.payload !== "object") return undefined;
     if ((event.payload as JsonObject).model !== ctx.model?.id) return undefined;
 
+    lastRequest = { model: modelKey(ctx.model!), mode };
+    updateStatus(ctx);
     return {
       ...(event.payload as JsonObject),
       service_tier: SERVICE_TIERS[mode],
     };
+  });
+
+  // Pi 1.0+ exposes raw stream events. Older hosts leave the tier unconfirmed.
+  const onStreamEvent = pi.on as unknown as (
+    event: "provider_stream_event",
+    handler: (event: { provider: string; model: string; data: unknown }, ctx: ExtensionContext) => void,
+  ) => void;
+  onStreamEvent("provider_stream_event", (event, ctx) => {
+    if (!mode || !lastRequest || lastRequest.mode !== mode ||
+        lastRequest.model !== modelKey({ provider: event.provider, id: event.model }) ||
+        lastRequest.model !== (ctx.model && modelKey(ctx.model))) return;
+    const data = asObject(event.data);
+    if (data?.type !== "response.completed") return;
+    const tier = asObject(data.response)?.service_tier;
+    // Display only known tier names, never arbitrary server strings in the terminal.
+    if (typeof tier !== "string" ||
+        !["auto", "default", "standard", "priority", "fast", "ultrafast", "flex", "scale"].includes(tier)) return;
+    lastRequest.tier = tier;
+    updateStatus(ctx);
+    if (tier !== SERVICE_TIERS[mode] && !(mode === "fast" && tier === "fast")) {
+      ctx.ui.notify(`Requested GPT ${modeLabel(mode)} (service_tier: ${SERVICE_TIERS[mode]}), ` +
+        `but the server reported ${tier}.`, "warning");
+    }
   });
 }
