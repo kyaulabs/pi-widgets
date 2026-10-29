@@ -6,10 +6,12 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
-// Explicit support from OpenAI's Fast pricing table; retain the existing gpt-5.6 alias.
+// Explicit support from OpenAI's Fast pricing tables (general and specialized models).
+// https://developers.openai.com/api/docs/pricing — retain the existing gpt-5.6 alias.
 const SUPPORTED_MODELS = new Set([
   "gpt-6-astra",
   "gpt-6.1-sol",
+  "gpt-6.1-terra",
   "gpt-6-sol",
   "gpt-6-luna",
   "gpt-5.6",
@@ -19,6 +21,7 @@ const SUPPORTED_MODELS = new Set([
   "gpt-5.5",
   "gpt-5.4",
   "gpt-5.4-mini",
+  "gpt-5.3-codex",
   "gpt-5.2",
   "gpt-5.1",
   "gpt-5",

@@ -63,6 +63,9 @@ loading duplicate widgets. Commands, settings keys, and shortcuts are unchanged.
 
 Fast mode is disabled by default. Run `/fast` or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd> to toggle it for the current session. The footer initially shows ` Fast (requested)`.
 
+Fast mode supports `gpt-6.1-terra` and `gpt-5.3-codex` in addition to the existing
+supported models on both `openai` and `openai-codex`.
+
 When the selected model is supported, the extension sends the API-compatible
 `priority` value for Fast mode in the matching provider request:
 
