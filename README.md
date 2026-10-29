@@ -104,13 +104,22 @@ active mode's command again disables it. The existing shortcut toggles Fast only
 Unsupported models and mismatched payloads are left unchanged, with a warning
 when the selected mode does not support the current model.
 
-The footer keeps `(requested)` until `response.completed` reports a `service_tier`.
-A matching tier removes that suffix. If the server reports a different tier, the
-footer shows, for example, `Fast → default`, and the extension warns. Missing tier
-metadata leaves the request unverified with `(requested)`. Unsupported models show
-`Fast (unsupported)`, `Ultrafast (unsupported)`, or `Flex (unsupported)`.
-Run `/fast status` to see the selected model, requested tier, and last reported tier
-without toggling the mode. Requesting a tier alone does not establish a speed increase.
+On the public `openai` API, the footer keeps `(requested)` until `response.completed`
+reports a `service_tier`. A matching tier removes that suffix. If the server reports
+a different tier, the footer shows, for example, `Fast → default`, and the extension
+warns. Missing tier metadata leaves the request unverified with `(requested)`.
+
+On `openai-codex` (ChatGPT sign-in), the footer keeps `(requested)` and does not warn
+about response-tier mismatches. OpenAI explains that
+[Codex response tiers do not reliably confirm Fast routing](https://github.com/openai/codex/issues/14204#issuecomment-4033184620):
+`default` does not mean Fast was ignored. `/fast status` preserves the raw reported
+value and notes that it does not confirm the applied tier. This applies to all three
+speed modes; the extension does not infer execution or billing from Codex metadata.
+
+Unsupported models show `Fast (unsupported)`, `Ultrafast (unsupported)`, or
+`Flex (unsupported)`. Run `/fast status` to inspect the selected model, requested tier,
+and last reported tier without toggling the mode. Requesting a tier alone does not
+establish a speed increase.
 
 Reasoning effort is a separate native Pi setting. In Pi 1.3 or newer, use
 `/thinking max` for the current session, or start with `pi --thinking max`.

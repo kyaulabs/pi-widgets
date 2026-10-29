@@ -73,13 +73,13 @@ describe("GPT Fast mode status", () => {
     expect(harness.setStatus).toHaveBeenLastCalledWith("gpt-fast-mode", undefined);
   });
 
-  it("reports the server tier rather than assuming a requested speed was granted", async () => {
-    const harness = createHarness({ model: { provider: "openai-codex", id: "gpt-6.1-sol" } });
+  it("reports public API tier mismatches rather than assuming the request was granted", async () => {
+    const harness = createHarness({ model: { provider: "openai", id: "gpt-6.1-sol" } });
     gptFastModeStatus(harness.pi);
     await handler(harness.command("fast").handler)("", harness.ctx);
     await harness.fire("before_provider_request", { payload: { model: "gpt-6.1-sol" } });
     await harness.fire("provider_stream_event", {
-      provider: "openai-codex", model: "gpt-6.1-sol",
+      provider: "openai", model: "gpt-6.1-sol",
       data: { type: "response.completed", response: { service_tier: "default" } },
     });
     expect(harness.setStatus).toHaveBeenLastCalledWith(
@@ -90,7 +90,7 @@ describe("GPT Fast mode status", () => {
     );
     await handler(harness.command("fast").handler)("status", harness.ctx);
     expect(harness.notify).toHaveBeenLastCalledWith(
-      "Model: openai-codex/gpt-6.1-sol. Requested service_tier: priority. " +
+      "Model: openai/gpt-6.1-sol. Requested service_tier: priority. " +
       "Last reported service_tier: default.",
     );
   });
