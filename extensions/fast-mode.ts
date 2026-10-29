@@ -169,7 +169,9 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
       ctx.ui.setStatus(STATUS_KEY, undefined);
       return;
     }
-    const tier = reportedTier(ctx);
+    // Codex OAuth response tiers are not an authoritative routing confirmation.
+    // https://github.com/openai/codex/issues/14204#issuecomment-4033184620
+    const tier = ctx.model?.provider === "openai-codex" ? undefined : reportedTier(ctx);
     const suffix = !isSupportedModel(ctx.model, mode) ? " (unsupported)"
       : !tier ? " (requested)"
         : tier === SERVICE_TIERS[mode] || (mode === "fast" && tier === "fast")
@@ -204,8 +206,11 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
     handler: async (args, ctx) => {
       if (args.trim().toLowerCase() === "status") {
         const model = ctx.model ? modelKey(ctx.model) : "unknown model";
+        const tier = reportedTier(ctx);
+        const note = ctx.model?.provider === "openai-codex" && tier
+          ? " Codex response metadata does not confirm the applied tier." : "";
         ctx.ui.notify(`Model: ${model}. Requested service_tier: ${mode ? SERVICE_TIERS[mode] : "off"}. ` +
-          `Last reported service_tier: ${reportedTier(ctx) ?? "unconfirmed"}.`);
+          `Last reported service_tier: ${tier ?? "unconfirmed"}.${note}`);
         return;
       }
       toggle(ctx, "fast");
@@ -273,7 +278,8 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
         !["auto", "default", "standard", "priority", "fast", "ultrafast", "flex", "scale"].includes(tier)) return;
     lastRequest.tier = tier;
     updateStatus(ctx);
-    if (tier !== SERVICE_TIERS[mode] && !(mode === "fast" && tier === "fast")) {
+    if (event.provider !== "openai-codex" &&
+        tier !== SERVICE_TIERS[mode] && !(mode === "fast" && tier === "fast")) {
       ctx.ui.notify(`Requested GPT ${modeLabel(mode)} (service_tier: ${SERVICE_TIERS[mode]}), ` +
         `but the server reported ${tier}.`, "warning");
     }
