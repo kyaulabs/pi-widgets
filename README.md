@@ -61,7 +61,7 @@ loading duplicate widgets. Commands, settings keys, and shortcuts are unchanged.
 
 ## GPT Fast mode
 
-Fast mode is disabled by default. Run `/fast` or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd> to toggle it for the current session. The footer initially shows ` Fast (requested)`.
+Fast mode is disabled by default. Run `/fast` or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd> to toggle it for the current session. The footer shows ` Fast`.
 
 Fast mode supports `gpt-6.1-terra` and `gpt-5.3-codex` in addition to the existing
 supported models on both `openai` and `openai-codex`.
@@ -77,7 +77,7 @@ When the selected model is supported, the extension sends the API-compatible
 
 Run `/ultrafast` to request `service_tier: "ultrafast"` for `gpt-6-astra`,
 `gpt-6.1-sol`, or `gpt-5.6-sol` on either provider. The footer shows `⚡ Ultrafast`
-in purple, initially with `(requested)`. OpenAI documents general API availability
+in purple. OpenAI documents general API availability
 for GPT-6 Astra and [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol);
 the retained GPT-5.6 Sol support requires preview access. Both tiers cost more than Standard;
 see OpenAI's [Fast](https://developers.openai.com/api/docs/guides/fast-mode) and
@@ -104,12 +104,11 @@ active mode's command again disables it. The existing shortcut toggles Fast only
 Unsupported models and mismatched payloads are left unchanged, with a warning
 when the selected mode does not support the current model.
 
-On the public `openai` API, the footer keeps `(requested)` until `response.completed`
-reports a `service_tier`. A matching tier removes that suffix. If the server reports
-a different tier, the footer shows, for example, `Fast → default`, and the extension
-warns. Missing tier metadata leaves the request unverified with `(requested)`.
+On the public `openai` API, if `response.completed` reports a different `service_tier`,
+the footer shows, for example, `Fast → default`, and the extension warns. Matching or
+missing tier metadata leaves the mode label unchanged.
 
-On `openai-codex` (ChatGPT sign-in), the footer keeps `(requested)` and does not warn
+On `openai-codex` (ChatGPT sign-in), the footer shows the mode label and does not warn
 about response-tier mismatches. OpenAI explains that
 [Codex response tiers do not reliably confirm Fast routing](https://github.com/openai/codex/issues/14204#issuecomment-4033184620):
 `default` does not mean Fast was ignored. `/fast status` preserves the raw reported
