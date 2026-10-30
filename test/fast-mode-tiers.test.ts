@@ -21,7 +21,7 @@ async function request(harness: Harness): Promise<void> {
 
 async function completed(harness: Harness, tier: unknown): Promise<void> {
   await harness.fire("provider_stream_event", {
-    provider: MODEL.provider,
+    provider: harness.ctx.model?.provider ?? MODEL.provider,
     model: MODEL.id,
     data: { type: "response.completed", response: { service_tier: tier } },
   });
@@ -42,8 +42,8 @@ describe("GPT service-tier confirmation", () => {
     else process.env.PI_CODING_AGENT_DIR = originalAgentDir;
   });
 
-  it.each(["priority", "fast"])("confirms the server's %s Fast tier", async (tier) => {
-    const harness = createHarness({ model: MODEL });
+  it.each(["priority", "fast"])("confirms the public API's %s Fast tier", async (tier) => {
+    const harness = createHarness({ model: { ...MODEL, provider: "openai" } });
     gptFastModeStatus(harness.pi);
     await command(harness, "fast");
     expect(harness.setStatus).toHaveBeenLastCalledWith("gpt-fast-mode", FAST_REQUESTED);
@@ -56,7 +56,7 @@ describe("GPT service-tier confirmation", () => {
     expect(harness.notify).not.toHaveBeenCalled();
     await command(harness, "fast", " STATUS ");
     expect(harness.notify).toHaveBeenLastCalledWith(
-      `Model: openai-codex/gpt-6.1-sol. Requested service_tier: priority. ` +
+      `Model: openai/gpt-6.1-sol. Requested service_tier: priority. ` +
       `Last reported service_tier: ${tier}.`,
     );
     await request(harness);
@@ -66,8 +66,8 @@ describe("GPT service-tier confirmation", () => {
   it.each([
     { mode: "ultrafast", status: "\u001b[38;5;141m⚡\uFE0E Ultrafast\u001b[39m" },
     { mode: "flex", status: "<success>󰿗 Flex</success>" },
-  ])("confirms a granted $mode tier", async ({ mode, status }) => {
-    const harness = createHarness({ model: MODEL });
+  ])("confirms a granted public API $mode tier", async ({ mode, status }) => {
+    const harness = createHarness({ model: { ...MODEL, provider: "openai" } });
     gptFastModeStatus(harness.pi);
     await command(harness, mode);
     await request(harness);
@@ -77,28 +77,29 @@ describe("GPT service-tier confirmation", () => {
     expect(harness.notify).not.toHaveBeenCalled();
     await command(harness, "fast", "status");
     expect(harness.notify).toHaveBeenLastCalledWith(
-      `Model: openai-codex/gpt-6.1-sol. Requested service_tier: ${mode}. ` +
+      `Model: openai/gpt-6.1-sol. Requested service_tier: ${mode}. ` +
       `Last reported service_tier: ${mode}.`,
     );
   });
 
-  it("reports the actual tier when the server does not grant Fast", async () => {
+  it.each(["fast", "ultrafast", "flex"].flatMap((mode) =>
+    ["auto", "default", "standard", "priority", "fast", "ultrafast", "flex", "scale"]
+      .map((tier) => ({ mode, tier })),
+  ))("does not infer a Codex $mode outcome from reported $tier", async ({ mode, tier }) => {
     const harness = createHarness({ model: MODEL });
     gptFastModeStatus(harness.pi);
-    await command(harness, "fast");
+    await command(harness, mode);
+    const requestedStatus = harness.setStatus.mock.lastCall;
     await request(harness);
-    await completed(harness, "default");
-    expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "<warning> Fast → default</warning>",
-    );
-    expect(harness.notify).toHaveBeenLastCalledWith(
-      "Requested GPT Fast (service_tier: priority), but the server reported default.",
-      "warning",
-    );
+    harness.notify.mockClear();
+    await completed(harness, tier);
+    expect(harness.setStatus).toHaveBeenLastCalledWith(...requestedStatus!);
+    expect(harness.notify).not.toHaveBeenCalled();
     await command(harness, "fast", "status");
     expect(harness.notify).toHaveBeenLastCalledWith(
-      "Model: openai-codex/gpt-6.1-sol. Requested service_tier: priority. " +
-      "Last reported service_tier: default.",
+      `Model: openai-codex/gpt-6.1-sol. Requested service_tier: ${mode === "fast" ? "priority" : mode}. ` +
+      `Last reported service_tier: ${tier}. ` +
+      "Codex response metadata does not confirm the applied tier.",
     );
   });
 
