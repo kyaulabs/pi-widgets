@@ -6,7 +6,7 @@ import gptFastModeStatus from "../extensions/fast-mode.js";
 import { createHarness } from "./harness.js";
 
 const MODEL = { provider: "openai-codex", id: "gpt-6.1-sol" };
-const FAST_REQUESTED = "<warning> Fast (requested)</warning>";
+const FAST_REQUESTED = "<warning> Fast</warning>";
 type Harness = ReturnType<typeof createHarness>;
 
 async function command(harness: Harness, name: string, args = ""): Promise<void> {
@@ -198,7 +198,7 @@ describe("GPT service-tier confirmation", () => {
     await completed(harness, "priority");
     await command(harness, "ultrafast");
     expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "\u001b[38;5;141m⚡\uFE0E Ultrafast (requested)\u001b[39m",
+      "gpt-fast-mode", "\u001b[38;5;141m⚡\uFE0E Ultrafast\u001b[39m",
     );
     await request(harness);
     await completed(harness, "ultrafast");
@@ -210,7 +210,7 @@ describe("GPT service-tier confirmation", () => {
     harness.ctx.model = { ...harness.ctx.model!, ...MODEL };
     await harness.fire("model_select");
     expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "\u001b[38;5;141m⚡\uFE0E Ultrafast (requested)\u001b[39m",
+      "gpt-fast-mode", "\u001b[38;5;141m⚡\uFE0E Ultrafast\u001b[39m",
     );
     await command(harness, "fast", "status");
     expect(harness.notify).toHaveBeenLastCalledWith(

@@ -173,9 +173,8 @@ export default function gptFastModeStatus(pi: ExtensionAPI): void {
     // https://github.com/openai/codex/issues/14204#issuecomment-4033184620
     const tier = ctx.model?.provider === "openai-codex" ? undefined : reportedTier(ctx);
     const suffix = !isSupportedModel(ctx.model, mode) ? " (unsupported)"
-      : !tier ? " (requested)"
-        : tier === SERVICE_TIERS[mode] || (mode === "fast" && tier === "fast")
-          ? "" : ` → ${tier}`;
+      : !tier || tier === SERVICE_TIERS[mode] || (mode === "fast" && tier === "fast")
+        ? "" : ` → ${tier}`;
     const status = STATUS_TEXT[mode] + suffix;
     ctx.ui.setStatus(
       STATUS_KEY,

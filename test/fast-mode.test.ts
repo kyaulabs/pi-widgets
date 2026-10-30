@@ -45,7 +45,7 @@ describe("GPT Fast mode status", () => {
     await handler(harness.command("fast").handler)("", harness.ctx);
     expect(harness.setStatus).toHaveBeenLastCalledWith(
       "gpt-fast-mode",
-      "<warning> Fast (requested)</warning>",
+      "<warning> Fast</warning>",
     );
     expect(harness.notify).toHaveBeenLastCalledWith(
       "GPT Fast mode enabled (service_tier: priority).",
@@ -141,7 +141,7 @@ describe("GPT Fast mode status", () => {
     const payload = { model: model.id, service_tier: "default", stream: true };
     await handler(harness.command("ultrafast").handler)("", harness.ctx);
     expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "\u001b[38;5;141m⚡\uFE0E Ultrafast (requested)\u001b[39m",
+      "gpt-fast-mode", "\u001b[38;5;141m⚡\uFE0E Ultrafast\u001b[39m",
     );
     expect(harness.notify).toHaveBeenLastCalledWith(
       "GPT Ultrafast mode enabled (service_tier: ultrafast).",
@@ -174,7 +174,7 @@ describe("GPT Fast mode status", () => {
     const payload = { model: model.id, service_tier: "default", stream: true };
     await handler(harness.command("flex").handler)("", harness.ctx);
     expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "<success>󰿗 Flex (requested)</success>",
+      "gpt-fast-mode", "<success>󰿗 Flex</success>",
     );
     expect(harness.notify).toHaveBeenLastCalledWith(
       "GPT Flex mode enabled (service_tier: flex).",
@@ -228,7 +228,7 @@ describe("GPT Fast mode status", () => {
     expect(harness.setStatus).toHaveBeenLastCalledWith("gpt-fast-mode", undefined);
     await harness.fire("session_start");
     expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "<warning> Fast (requested)</warning>",
+      "gpt-fast-mode", "<warning> Fast</warning>",
     );
     await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
       { ...payload, service_tier: "priority" },
@@ -251,7 +251,7 @@ describe("GPT Fast mode status", () => {
     ]);
     await handler(harness.shortcut("ctrl+alt+m").handler)(harness.ctx);
     expect(harness.setStatus).toHaveBeenLastCalledWith(
-      "gpt-fast-mode", "<warning> Fast (requested)</warning>",
+      "gpt-fast-mode", "<warning> Fast</warning>",
     );
     await expect(harness.fire("before_provider_request", { payload })).resolves.toEqual([
       { ...payload, service_tier: "priority" },
@@ -333,7 +333,7 @@ describe("GPT Fast mode status", () => {
     await harness.fire("session_start");
     expect(harness.setStatus).toHaveBeenLastCalledWith(
       "gpt-fast-mode",
-      "<warning> Fast (requested)</warning>",
+      "<warning> Fast</warning>",
     );
     await expect(
       harness.fire("before_provider_request", { payload: { model: "gpt-5.6" } }),
