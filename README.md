@@ -4,10 +4,11 @@
 [![npm](https://img.shields.io/npm/v/@kyaulabs/pi-widgets)](https://www.npmjs.com/package/@kyaulabs/pi-widgets)
 [![license](https://img.shields.io/github/license/kyaulabs/pi-widgets)](LICENSE)
 
-Status widgets for [Pi](https://github.com/earendil-works/pi-mono). The package contains two independent extensions:
+Status widgets for [Pi](https://github.com/earendil-works/pi-mono). The package contains three independent extensions:
 
 - `fast-mode.ts` requests OpenAI's Fast, Ultrafast, and Flex service tiers and shows the tier reported by the server.
 - `tps.ts` reports request-average output throughput and first-server-event latency (displayed as TTFT) in Pi's footer and working line.
+- `cache.ts` diagnoses OpenAI prompt-cache misses and reports actual cached-input usage.
 
 ## Requirements
 
@@ -18,7 +19,7 @@ The package is tested against Pi 0.84.4. Pi loads the TypeScript files directly,
 
 ## Install
 
-Install both extensions from npm:
+Install the extensions from npm:
 
 ```sh
 pi install npm:@kyaulabs/pi-widgets
@@ -53,7 +54,7 @@ Pi package filters can select a single widget. Add the package in object form to
 }
 ```
 
-Replace the extension path with `extensions/tps.ts` to load only the TPS widget.
+Replace the extension path with `extensions/tps.ts` or `extensions/cache.ts` to load only that widget.
 
 If upgrading from the old filenames, update explicit extension paths and package filters to
 `extensions/fast-mode.ts` and `extensions/tps.ts`. Remove any manually copied old files to avoid
@@ -178,6 +179,38 @@ Set one shortcut, several shortcuts, or `false` in `~/.pi/agent/keybindings.json
 ```
 
 The default is `ctrl+alt+m`. The extension ignores `ctrl+m`, `enter`, and `return` because those keys submit input in common terminal configurations. Empty or invalid scalar values restore the default shortcut.
+
+## Prompt cache diagnostics
+
+Cache diagnostics are off by default. Run `/cache` to toggle them for the current
+session, or use `/cache on` and `/cache off`. Run `/cache status` for the last
+comparison result, actual cached-input tokens, and any reported miss reason.
+
+This widget requires the direct `openai` provider, the Responses API, and a
+supported GPT-5.6 or later model. It does not enable diagnostics for
+`openai-codex`, other providers, or Chat Completions. Pi must expose raw
+`provider_stream_event` events; otherwise the result remains unconfirmed.
+
+After the first completed response establishes a baseline, each request compares
+against the preceding completed response. The footer shows results such as
+`Cache hit · 80%` or `Cache miss · 0%`. The percentage comes from actual usage,
+not diagnostic token estimates. A hit does not mean all input was cached.
+
+`/cache status` explains misses such as changed tools, reasoning effort, service
+tier, input, or compaction. Switching `/fast`, `/ultrafast`, or `/flex` can affect
+cache reuse. Missing or expired baselines and unavailable diagnostics are not
+reported as hits. The next completed response becomes the new baseline.
+
+Diagnostics do not improve caching automatically, load earlier conversation
+content, or enable response storage. They add no API requests and have no extra
+diagnostic charge. Normal model requests remain billable. Baselines are held
+only in memory and cleared on model changes, tree navigation, and session
+replacement; new sessions and reloads start with diagnostics off. Existing
+explicit comparison IDs and other request options are preserved.
+
+See [OpenAI's diagnostic guide](https://developers.openai.com/api/docs/guides/prompt-caching/diagnostics)
+for supported models, miss reasons, data retention, and limitations. Reusable
+prefixes need at least 1,024 tokens on supported GPT-5.6 and later models.
 
 ## TPS and TTFT status
 
