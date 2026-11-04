@@ -7,7 +7,7 @@ Bug reports, focused feature proposals, documentation fixes, and tested code cha
 Search the existing issues first. For a bug, include:
 
 - Pi, Node.js, operating system, and terminal versions;
-- the active provider and model when the problem involves Fast mode;
+- the active provider, model, and API type for Fast mode or cache diagnostics;
 - whether the standard Pi interface or Zentui is active;
 - the smallest settings and event sequence that reproduces the problem; and
 - the expected and observed output.
@@ -41,6 +41,11 @@ Keep each change limited to one purpose. Preserve these runtime contracts:
   Keep the UI labels to `tok/s` and `TTFT`, document internal estimation and retry timing limits,
   and test lifecycle timing deterministically.
 - Unsupported models must not receive `service_tier: "priority"`.
+- Cache diagnostics must be opt-in and limited to supported direct OpenAI Responses models.
+  Preserve unrelated request options and explicit comparison IDs. Use actual usage for cached-input
+  percentages; never infer a hit from absent diagnostics. Keep response IDs in memory, clear stale
+  baselines on session or model changes and tree navigation, and sanitize server metadata before
+  displaying it. Test the request/stream boundary without credentials or network access.
 
 Tests should assert behavior at the Pi extension boundary. Use temporary files for configuration and deterministic clocks for timing. Do not expose private production functions only to increase coverage.
 

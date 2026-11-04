@@ -8,6 +8,7 @@ describe("Pi package entry points", () => {
     expect(manifest.pi.extensions).toEqual([
       "./extensions/fast-mode.ts",
       "./extensions/tps.ts",
+      "./extensions/cache.ts",
     ]);
     for (const entry of manifest.pi.extensions) {
       expect(existsSync(new URL(entry, root))).toBe(true);

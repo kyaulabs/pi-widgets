@@ -30,7 +30,8 @@
   "pi": {
     "extensions": [
       "./extensions/fast-mode.ts",
-      "./extensions/tps.ts"
+      "./extensions/tps.ts",
+      "./extensions/cache.ts"
     ]
   },
   "scripts": {
