@@ -119,7 +119,8 @@ describe("GPT Fast mode status", () => {
   });
 
   it.each(["openai", "openai-codex"].flatMap((provider) =>
-    ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.3-codex",
+    ["gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-sol", "gpt-6.1-terra",
+      "gpt-6-sol", "gpt-6-luna", "gpt-5.3-codex",
       "gpt-5.2", "gpt-5.1", "gpt-5",
       "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o",
       "gpt-4o-2024-05-13", "gpt-4o-mini", "o3", "o4-mini"]
@@ -134,7 +135,8 @@ describe("GPT Fast mode status", () => {
   });
 
   it.each(["openai", "openai-codex"].flatMap((provider) =>
-    ["gpt-6-astra", "gpt-6.1-sol", "gpt-5.6-sol"].map((id) => ({ provider, id })),
+    ["gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-terra", "gpt-6-astra", "gpt-6.1-sol",
+      "gpt-5.6-sol"].map((id) => ({ provider, id })),
   ))("toggles Ultrafast for $provider/$id", async (model) => {
     const harness = createHarness({ model });
     gptFastModeStatus(harness.pi);
@@ -198,6 +200,8 @@ describe("GPT Fast mode status", () => {
   it.each([
     { provider: "openai", id: "gpt-4.1" },
     { provider: "openai-codex", id: "gpt-5.6" },
+    ...["openai", "openai-codex"].flatMap((provider) =>
+      ["gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-terra"].map((id) => ({ provider, id }))),
     { provider: "anthropic", id: "gpt-6-astra" },
     undefined,
   ])("leaves unsupported Flex requests unchanged for %j", async (model) => {

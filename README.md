@@ -64,8 +64,9 @@ loading duplicate widgets. Commands, settings keys, and shortcuts are unchanged.
 
 Fast mode is disabled by default. Run `/fast` or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd> to toggle it for the current session. The footer shows ` Fast`.
 
-Fast mode supports `gpt-6.1-terra` and `gpt-5.3-codex` in addition to the existing
-supported models on both `openai` and `openai-codex`.
+Fast mode supports `gpt-6.2-sol`, `gpt-6.2-astra`, `gpt-6.1-terra`, and
+`gpt-5.3-codex` in addition to the existing supported models on both `openai`
+and `openai-codex`.
 
 When the selected model is supported, the extension sends the API-compatible
 `priority` value for Fast mode in the matching provider request:
@@ -76,8 +77,9 @@ When the selected model is supported, the extension sends the API-compatible
 }
 ```
 
-Run `/ultrafast` to request `service_tier: "ultrafast"` for `gpt-6-astra`,
-`gpt-6.1-sol`, or `gpt-5.6-sol` on either provider. The footer shows `⚡ Ultrafast`
+Run `/ultrafast` to request `service_tier: "ultrafast"` for `gpt-6.2-sol`,
+`gpt-6.2-astra`, `gpt-6.1-terra`, `gpt-6-astra`, `gpt-6.1-sol`, or `gpt-5.6-sol`
+on either provider. The footer shows `⚡ Ultrafast`
 in purple. OpenAI documents general API availability
 for GPT-6 Astra and [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol);
 the retained GPT-5.6 Sol support requires preview access. Both tiers cost more than Standard;
@@ -138,6 +140,7 @@ reasoning effort.
 The extension enables Fast requests on `openai` and `openai-codex` for the models
 in OpenAI's [Fast pricing table](https://developers.openai.com/api/docs/pricing?latest-pricing=fast):
 
+- `gpt-6.2-sol`, `gpt-6.2-astra`, `gpt-6.1-terra`
 - `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-6-luna`
 - `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`
 - `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.2`, `gpt-5.1`, `gpt-5`, `gpt-5-mini`
