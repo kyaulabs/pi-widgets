@@ -9,6 +9,8 @@ import type {
 // Explicit support from OpenAI's Fast pricing tables (general and specialized models).
 // https://developers.openai.com/api/docs/pricing — retain the existing gpt-5.6 alias.
 const SUPPORTED_MODELS = new Set([
+  "gpt-6.2-sol",
+  "gpt-6.2-astra",
   "gpt-6-astra",
   "gpt-6.1-sol",
   "gpt-6.1-terra",
@@ -35,7 +37,9 @@ const SUPPORTED_MODELS = new Set([
   "o3",
   "o4-mini",
 ]);
-const ULTRAFAST_MODELS = new Set(["gpt-6-astra", "gpt-6.1-sol", "gpt-5.6-sol"]);
+const ULTRAFAST_MODELS = new Set([
+  "gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-terra", "gpt-6-astra", "gpt-6.1-sol", "gpt-5.6-sol",
+]);
 // Flex has its own availability list; Fast support does not imply Flex support.
 const FLEX_MODELS = new Set([
   "gpt-6-astra",
